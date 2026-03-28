@@ -5,6 +5,7 @@ const db = require('./config/db');
 
 const candidateRoutes = require('./routes/candidateRoutes');
 const recruitmentSourceRoutes = require('./routes/recruitmentSourceRoutes');
+const documentRoutes = require('./routes/documentRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
@@ -22,6 +23,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/recruitment-sources', recruitmentSourceRoutes);
+app.use('/api', documentRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
