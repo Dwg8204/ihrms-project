@@ -12,8 +12,13 @@ const ALLOWED_UPDATE_FIELDS = [
   'weight',
   'blood_type',
   'education_level',
+  'experience_summary',
   'source_id',
+  'source_note',
   'status',
+  'is_fee0_paid',
+  'fee0_paid_amount',
+  'fee0_paid_at',
   'cv_file_url'
 ];
 
@@ -61,8 +66,13 @@ const Candidate = {
         c.weight,
         c.blood_type,
         c.education_level,
+        c.experience_summary,
         c.source_id,
+        c.source_note,
         c.status,
+        c.is_fee0_paid,
+        c.fee0_paid_amount,
+        c.fee0_paid_at,
         c.cv_file_url,
         c.created_at,
         c.updated_at,
@@ -100,8 +110,13 @@ const Candidate = {
         c.weight,
         c.blood_type,
         c.education_level,
+        c.experience_summary,
         c.source_id,
+        c.source_note,
         c.status,
+        c.is_fee0_paid,
+        c.fee0_paid_amount,
+        c.fee0_paid_at,
         c.cv_file_url,
         c.created_at,
         c.updated_at,
@@ -121,9 +136,10 @@ const Candidate = {
       INSERT INTO candidates
       (
         full_name, dob, gender, phone, email, address, height, weight,
-        blood_type, education_level, source_id, status, cv_file_url
+        blood_type, education_level, experience_summary, source_id, source_note,
+        status, is_fee0_paid, fee0_paid_amount, fee0_paid_at, cv_file_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -137,8 +153,13 @@ const Candidate = {
       candidateData.weight || null,
       candidateData.blood_type || null,
       candidateData.education_level || null,
-      candidateData.source_id || null,
-      candidateData.status || CANDIDATE_STATUSES.RECEIVED,
+      candidateData.experience_summary || null,
+      candidateData.source_id,
+      candidateData.source_note || null,
+      candidateData.status || CANDIDATE_STATUSES.NEW_RECEIVED,
+      candidateData.is_fee0_paid || 0,
+      candidateData.fee0_paid_amount || null,
+      candidateData.fee0_paid_at || null,
       candidateData.cv_file_url || null
     ];
 
@@ -220,6 +241,8 @@ const Candidate = {
           c.email,
           c.status,
           c.source_id,
+          c.source_note,
+          c.is_fee0_paid,
           c.updated_at,
           s.source_name,
           ROW_NUMBER() OVER (PARTITION BY c.status ORDER BY c.updated_at DESC, c.id DESC) AS rn
@@ -256,7 +279,7 @@ const Candidate = {
         s.id,
         s.source_name,
         COUNT(c.id) AS total_candidates,
-        SUM(CASE WHEN c.status = ? THEN 1 ELSE 0 END) AS waiting_exam_candidates,
+        SUM(CASE WHEN c.status = ? THEN 1 ELSE 0 END) AS passed_candidates,
         ROUND(
           SUM(CASE WHEN c.status = ? THEN 1 ELSE 0 END) / NULLIF(COUNT(c.id), 0) * 100,
           2
@@ -269,8 +292,8 @@ const Candidate = {
       ORDER BY conversion_pct DESC, total_candidates DESC, s.id DESC
       `,
       [
-        CANDIDATE_STATUSES.WAITING_EXAM,
-        CANDIDATE_STATUSES.WAITING_EXAM,
+        CANDIDATE_STATUSES.PASSED,
+        CANDIDATE_STATUSES.PASSED,
         fromDate,
         toDate
       ]

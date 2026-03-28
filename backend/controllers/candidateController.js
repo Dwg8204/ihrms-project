@@ -1,5 +1,6 @@
 const Candidate = require('../models/candidateModel');
 const RecruitmentSource = require('../models/recruitmentSourceModel');
+const DocumentModel = require('../models/documentModel');
 const {
   CANDIDATE_STATUSES,
   STATUS_ORDER,
@@ -35,6 +36,17 @@ function toNullableFloat(value) {
   return Number.isNaN(parsed) ? NaN : parsed;
 }
 
+function toNullableBoolean(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return 1;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return 0;
+  return NaN;
+}
+
 function pickField(body, snakeKey, camelKey) {
   if (Object.prototype.hasOwnProperty.call(body, snakeKey)) {
     return body[snakeKey];
@@ -46,10 +58,6 @@ function pickField(body, snakeKey, camelKey) {
 }
 
 function normalizeCandidatePayload(body) {
-  const sourceIdRaw = pickField(body, 'source_id', 'sourceId');
-  const heightRaw = pickField(body, 'height', 'height');
-  const weightRaw = pickField(body, 'weight', 'weight');
-
   return {
     full_name: pickField(body, 'full_name', 'fullName'),
     dob: pickField(body, 'dob', 'dob'),
@@ -57,18 +65,47 @@ function normalizeCandidatePayload(body) {
     phone: pickField(body, 'phone', 'phone'),
     email: pickField(body, 'email', 'email'),
     address: pickField(body, 'address', 'address'),
-    height: toNullableFloat(heightRaw),
-    weight: toNullableFloat(weightRaw),
+    height: toNullableFloat(pickField(body, 'height', 'height')),
+    weight: toNullableFloat(pickField(body, 'weight', 'weight')),
     blood_type: pickField(body, 'blood_type', 'bloodType'),
     education_level: pickField(body, 'education_level', 'educationLevel'),
-    source_id: toNullableInt(sourceIdRaw),
+    experience_summary: pickField(body, 'experience_summary', 'experienceSummary'),
+    source_id: toNullableInt(pickField(body, 'source_id', 'sourceId')),
+    source_note: pickField(body, 'source_note', 'sourceNote'),
     status: pickField(body, 'status', 'status'),
+    is_fee0_paid: toNullableBoolean(pickField(body, 'is_fee0_paid', 'isFee0Paid')),
+    fee0_paid_amount: toNullableFloat(pickField(body, 'fee0_paid_amount', 'fee0PaidAmount')),
+    fee0_paid_at: pickField(body, 'fee0_paid_at', 'fee0PaidAt'),
     cv_file_url: pickField(body, 'cv_file_url', 'cvFileUrl')
   };
 }
 
 function hasAnyEditableField(payload) {
   return Object.values(payload).some((value) => value !== undefined);
+}
+
+async function validateSourceMandatory(sourceId) {
+  if (sourceId === undefined || sourceId === null || Number.isNaN(sourceId) || sourceId <= 0) {
+    throw createHttpError('source_id is required and must be a positive integer', 400);
+  }
+
+  const source = await RecruitmentSource.getById(sourceId);
+  if (!source) {
+    throw createHttpError('source_id does not exist', 400);
+  }
+}
+
+async function validatePreExamGate(candidate) {
+  if (!candidate.is_fee0_paid) {
+    throw createHttpError('Cannot move status: candidate has not paid fee0', 409);
+  }
+
+  const readiness = await DocumentModel.getPreExamReadiness(candidate.id);
+  if (!readiness.can_proceed) {
+    const error = createHttpError('Cannot move status: required pre-exam documents are not complete', 409);
+    error.details = readiness;
+    throw error;
+  }
 }
 
 const candidateController = {
@@ -125,41 +162,45 @@ const candidateController = {
       if (!payload.full_name || !String(payload.full_name).trim()) {
         return next(createHttpError('full_name is required', 400));
       }
-
       payload.full_name = String(payload.full_name).trim();
 
-      if (payload.status === undefined || payload.status === null || payload.status === '') {
-        payload.status = CANDIDATE_STATUSES.RECEIVED;
-      }
-
-      if (!isValidStatus(payload.status)) {
-        return next(createHttpError('Invalid candidate status', 400));
-      }
-
-      if (Number.isNaN(payload.source_id) || (payload.source_id !== null && payload.source_id <= 0)) {
-        return next(createHttpError('Invalid source_id', 400));
-      }
-
-      if (payload.source_id) {
-        const source = await RecruitmentSource.getById(payload.source_id);
-        if (!source) {
-          return next(createHttpError('source_id does not exist', 400));
-        }
-      }
+      await validateSourceMandatory(payload.source_id);
 
       if (Number.isNaN(payload.height)) {
         return next(createHttpError('Invalid height', 400));
       }
-
       if (Number.isNaN(payload.weight)) {
         return next(createHttpError('Invalid weight', 400));
+      }
+
+      if (Number.isNaN(payload.is_fee0_paid)) {
+        return next(createHttpError('Invalid is_fee0_paid', 400));
+      }
+
+      if (payload.is_fee0_paid === undefined || payload.is_fee0_paid === null) {
+        payload.is_fee0_paid = 0;
+      }
+
+      if (payload.is_fee0_paid === 0) {
+        payload.fee0_paid_amount = null;
+        payload.fee0_paid_at = null;
+      } else if (!payload.fee0_paid_at) {
+        payload.fee0_paid_at = new Date();
       }
 
       if (req.file) {
         payload.cv_file_url = req.file.path || req.file.secure_url || null;
       }
 
+      payload.status = CANDIDATE_STATUSES.NEW_RECEIVED;
+
       const newId = await Candidate.create(payload);
+
+      await DocumentModel.initCandidateDocuments({
+        candidateId: newId,
+        phase: 'PRE_EXAM'
+      });
+
       const created = await Candidate.getById(newId);
 
       res.status(201).json({
@@ -193,28 +234,30 @@ const candidateController = {
       if (payload.full_name !== undefined && !String(payload.full_name).trim()) {
         return next(createHttpError('full_name cannot be empty', 400));
       }
-
       if (payload.full_name !== undefined) {
         payload.full_name = String(payload.full_name).trim();
       }
 
-      if (Number.isNaN(payload.source_id) || (payload.source_id !== null && payload.source_id <= 0)) {
-        return next(createHttpError('Invalid source_id', 400));
-      }
-
-      if (payload.source_id) {
-        const source = await RecruitmentSource.getById(payload.source_id);
-        if (!source) {
-          return next(createHttpError('source_id does not exist', 400));
-        }
+      if (payload.source_id !== undefined) {
+        await validateSourceMandatory(payload.source_id);
       }
 
       if (Number.isNaN(payload.height)) {
         return next(createHttpError('Invalid height', 400));
       }
-
       if (Number.isNaN(payload.weight)) {
         return next(createHttpError('Invalid weight', 400));
+      }
+
+      if (Number.isNaN(payload.is_fee0_paid)) {
+        return next(createHttpError('Invalid is_fee0_paid', 400));
+      }
+
+      if (payload.is_fee0_paid === 0) {
+        payload.fee0_paid_amount = null;
+        payload.fee0_paid_at = null;
+      } else if (payload.is_fee0_paid === 1 && !payload.fee0_paid_at) {
+        payload.fee0_paid_at = new Date();
       }
 
       if (req.file) {
@@ -257,6 +300,16 @@ const candidateController = {
 
       if (!canTransition(candidate.status, nextStatus)) {
         return next(createHttpError('Status transition is not allowed', 409));
+      }
+
+      const gateRequiredStatuses = new Set([
+        CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED,
+        CANDIDATE_STATUSES.WAITING_FORM_MATCH,
+        CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM
+      ]);
+
+      if (gateRequiredStatuses.has(nextStatus)) {
+        await validatePreExamGate(candidate);
       }
 
       await Candidate.updateStatus(id, nextStatus);
