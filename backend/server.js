@@ -6,7 +6,11 @@ const db = require('./config/db');
 const candidateRoutes = require('./routes/candidateRoutes');
 const recruitmentSourceRoutes = require('./routes/recruitmentSourceRoutes');
 const documentRoutes = require('./routes/documentRoutes');
+const partnerRoutes = require('./routes/partnerRoutes');
+const jobOrderRoutes = require('./routes/jobOrderRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
+const cron = require('node-cron');
+const JobOrder = require('./models/jobOrderModel');
 
 const app = express();
 
@@ -24,6 +28,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/recruitment-sources', recruitmentSourceRoutes);
 app.use('/api', documentRoutes);
+app.use('/api/partners', partnerRoutes);
+app.use('/api/job-orders', jobOrderRoutes);
+
+cron.schedule('0 0 * * *', async () => {
+    console.log('Running daily cron job for job orders...');
+    try {
+        await JobOrder.updateExpiredJobOrders();
+        await JobOrder.hardDeleteCancelledJobOrders(7); // Xóa vĩnh viễn các đơn hàng đã hủy quá 7 ngày.
+    } catch (error) {
+        console.error('Error during daily cron job:', error);
+    }
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);
