@@ -1,0 +1,6 @@
+ALTER TABLE exam_applications
+ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE exam_applications
+ADD CONSTRAINT uq_exam_application UNIQUE (candidate_id, job_order_id);
