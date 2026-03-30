@@ -312,7 +312,8 @@ const candidateController = {
         await validatePreExamGate(candidate);
       }
 
-      await Candidate.updateStatus(id, nextStatus);
+      // await Candidate.updateStatus(id, nextStatus);
+      await Candidate.transitionStatus(id, nextStatus, { jobOrderId: req.body.jobOrderId || null });
       const updated = await Candidate.getById(id);
 
       res.status(200).json({

@@ -1,0 +1,132 @@
+const ExamApplication = require('../models/examApplicationModel');
+const Candidate = require('../models/candidateModel');
+const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
+
+exports.createExamApplication = async (req, res, next) => {
+    try {
+        const { candidate_id, job_order_id, exam_date, note } = req.body;
+
+        if (!candidate_id || !job_order_id || !exam_date) {
+            return res.status(400).json({ success: false, message: 'Candidate ID, Job Order ID, and Exam Date are required.' });
+        }
+
+        // Tạo đơn đăng ký thi
+        const newExamApp = await ExamApplication.create({ candidate_id, job_order_id, exam_date, note });
+        
+        // TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI ỨNG VIÊN (Tích hợp Mô-đun 1)
+        await Candidate.transitionStatus(candidate_id, CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM, { jobOrderId: job_order_id });
+
+        res.status(201).json({ success: true, data: newExamApp, message: 'Exam application created and candidate status updated.' });
+    } catch (error) {
+        if (error.message.includes('Candidate not found') || error.message.includes('Job Order not found') || error.message.includes('must be in WAITING_FORM_MATCH status') || error.message.includes('Job Order must be in OPEN status')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        if (error.message.includes('already registered for an exam')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
+        if (error.message.includes('Invalid status transition') || error.message.includes('Candidate must be in')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
+exports.getExamApplications = async (req, res, next) => {
+    try {
+        const { page, limit, search, candidate_id, job_order_id, result_status } = req.query;
+        const examApps = await ExamApplication.findAll({
+            page: parseInt(page),
+            limit: parseInt(limit),
+            search,
+            candidate_id: candidate_id ? parseInt(candidate_id) : null,
+            job_order_id: job_order_id ? parseInt(job_order_id) : null,
+            result_status
+        });
+        res.status(200).json({ success: true, ...examApps });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.getExamApplicationById = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const examApp = await ExamApplication.findById(id);
+        if (!examApp) {
+            return res.status(404).json({ success: false, message: 'Exam application not found.' });
+        }
+        res.status(200).json({ success: true, data: examApp });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.updateExamResult = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { result_status, score_details, note } = req.body;
+
+        if (!result_status) {
+            return res.status(400).json({ success: false, message: 'Result status is required.' });
+        }
+
+        const currentExamApp = await ExamApplication.findById(id);
+        if (!currentExamApp) {
+            return res.status(404).json({ success: false, message: 'Exam application not found.' });
+        }
+
+        const updated = await ExamApplication.updateResult(id, { result_status, score_details, note });
+        if (!updated) {
+            return res.status(500).json({ success: false, message: 'Failed to update exam result.' });
+        }
+
+        // TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI ỨNG VIÊN (Tích hợp Mô-đun 1)
+        let newCandidateStatus = null;
+        if (result_status === 'Pass') {
+            newCandidateStatus = CANDIDATE_STATUSES.PASSED;
+        } else if (result_status === 'Fail') {
+            newCandidateStatus = CANDIDATE_STATUSES.FAILED_POOL;
+        }
+
+        if (newCandidateStatus) {
+            await Candidate.transitionStatus(currentExamApp.candidate_id, newCandidateStatus, { jobOrderId: currentExamApp.job_order_id });
+        }
+
+        res.status(200).json({ success: true, message: 'Exam result updated and candidate status updated.' });
+    } catch (error) {
+        if (error.message.includes('Exam application not found') || error.message.includes('Invalid result status') || error.message.includes('Exam result already updated') || error.message.includes('score_details must be a valid JSON object')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        if (error.message.includes('Invalid status transition') || error.message.includes('Candidate must be in') || error.message.includes('No pending exam application')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
+exports.deleteExamApplication = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const examApp = await ExamApplication.findById(id);
+        if (!examApp) {
+            return res.status(404).json({ success: false, message: 'Exam application not found.' });
+        }
+        
+        // Ngăn chặn việc xóa nếu kết quả đã được ghi lại.
+        if (examApp.result_status !== 'Pending') {
+            return res.status(409).json({ success: false, message: 'Cannot delete exam application with recorded result. Consider resetting result instead.' });
+        }
+
+        const deleted = await ExamApplication.delete(id);
+        if (!deleted) {
+            return res.status(500).json({ success: false, message: 'Failed to delete exam application.' });
+        }
+        res.status(200).json({ success: true, message: 'Exam application deleted successfully.' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Có thể bổ sung thêm bộ điều khiển tại đây cho 'Đào tạo Định hướng'
+// exports.createTrainingSchedule = ...
+// exports.getTrainingSchedule = ...

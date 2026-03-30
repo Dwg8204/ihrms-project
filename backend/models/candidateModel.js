@@ -1,5 +1,7 @@
 const db = require('../config/db');
-const { CANDIDATE_STATUSES, STATUS_ORDER } = require('../utils/candidateStatus');
+const { CANDIDATE_STATUSES, STATUS_ORDER, canTransition } = require('../utils/candidateStatus');
+const DocumentModel = require('./documentModel');
+const JobOrder = require('./jobOrderModel');
 
 const ALLOWED_UPDATE_FIELDS = [
   'full_name',
@@ -15,7 +17,7 @@ const ALLOWED_UPDATE_FIELDS = [
   'experience_summary',
   'source_id',
   'source_note',
-  'status',
+  //'status', //Xóa 'status' khỏi ALLOWED_UPDATE_FIELDS để bắt buộc sử dụng transitionStatus cho các thay đổi trạng thái.
   'is_fee0_paid',
   'fee0_paid_amount',
   'fee0_paid_at',
@@ -171,8 +173,13 @@ const Candidate = {
     const updates = [];
     const values = [];
 
+    // // Lọc bỏ 'status' khỏi các bản cập nhật trực tiếp
     for (const field of ALLOWED_UPDATE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(candidateData, field)) {
+        if (field === 'status') {
+            console.warn('Attempted to update status directly. Use transitionStatus method for status changes.');
+            continue; // Bỏ qua cập nhật trạng thái trực tiếp
+        }
         updates.push(`${field} = ?`);
         values.push(candidateData[field]);
       }
@@ -196,19 +203,119 @@ const Candidate = {
     return result.affectedRows > 0;
   },
 
-  updateStatus: async (id, status) => {
+  // Phương thức transitionStatus được sửa đổi với các Gate Conditions
+  transitionStatus: async (candidateId, newStatus, { jobOrderId = null } = {}) => {
+    const candidate = await Candidate.getById(candidateId);
+    if (!candidate) {
+      throw new Error('Candidate not found.');
+    }
+
+    const currentStatus = candidate.status;
+
+    if (currentStatus === newStatus) {
+      return { success: true, message: 'Status already up-to-date.' };
+    }
+
+    if (!canTransition(currentStatus, newStatus)) {
+      throw new Error(`Invalid status transition from ${currentStatus} to ${newStatus}.`);
+    }
+
+    // --- Gate Conditions ---
+    switch (newStatus) {
+      case CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED:
+        if (!candidate.is_fee0_paid) {
+          throw new Error('Candidate has not paid Fee 0 (is_fee0_paid = 0).');
+        }
+        const readiness = await DocumentModel.getPreExamReadiness(candidateId);
+        if (!readiness.can_proceed) {
+          throw new Error(`Candidate is missing required PRE_EXAM documents. Missing: ${readiness.missing_documents.map(d => d.name).join(', ')}`);
+        }
+        break;
+
+      case CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM:
+        if (currentStatus !== CANDIDATE_STATUSES.WAITING_FORM_MATCH) {
+          throw new Error(`Candidate must be in ${CANDIDATE_STATUSES.WAITING_FORM_MATCH} status to be matched to a form.`);
+        }
+        if (!jobOrderId) {
+          throw new Error('jobOrderId is required to transition to FORM_MATCHED_WAITING_EXAM.');
+        }
+        const jobOrder = await JobOrder.findById(jobOrderId);
+        if (!jobOrder || jobOrder.status !== require('../utils/jobOrderStatus').JOB_ORDER_STATUSES.OPEN) {
+          throw new Error('Job Order not found or not in OPEN status for matching.');
+        }
+        // Kiểm tra xem ứng viên đã được ghép nối với đơn đặt hàng công việc nào khác chưa
+        const [specificExamApp] = await db.query(
+            'SELECT id FROM exam_applications WHERE candidate_id = ? AND job_order_id = ? AND result_status = "Pending"',
+            [candidateId, jobOrderId]
+        );
+        if (specificExamApp.length === 0) {
+            // Trường hợp này cho thấy ExamApplication.create có thể đã thất bại hoặc ứng dụng thi chưa được xử lý.
+            throw new Error('No pending exam application found for this candidate and job order to transition status.');
+        }
+        break;
+
+      case CANDIDATE_STATUSES.PASSED:
+      case CANDIDATE_STATUSES.FAILED_POOL:
+        if (currentStatus !== CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM) {
+          throw new Error(`Candidate must be in ${CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM} status to update exam result.`);
+        }
+        // Kiểm tra bổ sung: Đảm bảo có đơn đăng ký thi (exam_application) và mã đơn đặt hàng công việc (job_order_id) cho ứng viên này
+        if (!jobOrderId) {
+            throw new Error('jobOrderId is required for exam result transitions.');
+        }
+        const [examRecord] = await db.query('SELECT id FROM exam_applications WHERE candidate_id = ? AND job_order_id = ?', [candidateId, jobOrderId]);
+        if (examRecord.length === 0) {
+            throw new Error('No exam application found for this candidate and job order to update result status.');
+        }
+        break;
+
+      // Thêm các điều kiện cổng khác cho các trạng thái khác nếu cần.
+    }
+
+    // Thực hiện cập nhật trạng thái
     const [result] = await db.query(
       `
       UPDATE candidates
       SET status = ?
       WHERE id = ?
       `,
-      [status, id]
+      [newStatus, candidateId]
     );
-    return result.affectedRows > 0;
+
+    return { success: result.affectedRows > 0, message: `Candidate status updated to ${newStatus}.` };
   },
 
+  // updateStatus: async (id, status) => {
+  //   const [result] = await db.query(
+  //     `
+  //     UPDATE candidates
+  //     SET status = ?
+  //     WHERE id = ?
+  //     `,
+  //     [status, id]
+  //   );
+  //   return result.affectedRows > 0;
+  // },
+
   deleteById: async (id) => {
+    // Kiểm tra xem ứng viên có bất kỳ hồ sơ liên quan nào không (đơn đăng ký thi, hợp đồng, giao dịch, ...)
+    const [examApps] = await db.query('SELECT id FROM exam_applications WHERE candidate_id = ?', [id]);
+    if (examApps.length > 0) {
+        throw new Error('Cannot delete candidate with linked exam applications.');
+    }
+    const [contracts] = await db.query('SELECT id FROM contracts WHERE candidate_id = ?', [id]);
+    if (contracts.length > 0) {
+        throw new Error('Cannot delete candidate with linked contracts.');
+    }
+    const [transactions] = await db.query('SELECT id FROM transactions WHERE candidate_id = ?', [id]);
+    if (transactions.length > 0) {
+        throw new Error('Cannot delete candidate with linked financial transactions.');
+    }
+    const [overseasRecords] = await db.query('SELECT id FROM overseas_records WHERE candidate_id = ?', [id]);
+    if (overseasRecords.length > 0) {
+        throw new Error('Cannot delete candidate with linked overseas records.');
+    }
+
     const [result] = await db.query(
       `
       DELETE FROM candidates
@@ -218,6 +325,17 @@ const Candidate = {
     );
     return result.affectedRows > 0;
   },
+
+  // deleteById: async (id) => {
+  //   const [result] = await db.query(
+  //     `
+  //     DELETE FROM candidates
+  //     WHERE id = ?
+  //     `,
+  //     [id]
+  //   );
+  //   return result.affectedRows > 0;
+  // },
 
   getKanbanBoard: async ({ source_id = null, limitPerStatus = 30 }) => {
     const statusPlaceholders = STATUS_ORDER.map(() => '?').join(', ');
