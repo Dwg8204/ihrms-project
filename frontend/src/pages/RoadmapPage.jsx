@@ -1,64 +1,67 @@
-import SectionHeader from '../components/SectionHeader';
+import SectionHeader from "../components/SectionHeader";
+import { useI18n } from "../i18n/I18nProvider";
 
 const plans = [
   {
-    module: 'M3',
-    title: 'Thi tuyển và đào tạo',
+    module: "M3",
+    title: "Thi tuyển và đào tạo",
     suggestedApis: [
-      'GET/POST /exam-applications',
-      'PATCH /exam-applications/:id/result',
-      'GET/POST /training-schedules'
-    ]
+      "GET/POST /exam-applications",
+      "PATCH /exam-applications/:id/result",
+      "GET/POST /training-schedules",
+    ],
   },
   {
-    module: 'M4',
-    title: 'Hợp đồng và cam kết',
+    module: "M4",
+    title: "Hợp đồng và cam kết",
     suggestedApis: [
-      'POST /contracts',
-      'PATCH /contracts/:id/status',
-      'GET /contracts?candidate_id=...'
-    ]
+      "POST /contracts",
+      "PATCH /contracts/:id/status",
+      "GET /contracts?candidate_id=...",
+    ],
   },
   {
-    module: 'M5',
-    title: 'Tài chính và phí dịch vụ',
+    module: "M5",
+    title: "Tài chính và phí dịch vụ",
     suggestedApis: [
-      'POST /transactions',
-      'GET /transactions?candidate_id=...',
-      'GET /finance/debt-alerts'
-    ]
+      "POST /transactions",
+      "GET /transactions?candidate_id=...",
+      "GET /finance/debt-alerts",
+    ],
   },
   {
-    module: 'M7',
-    title: 'Vận hành lao động tại nước ngoài',
+    module: "M7",
+    title: "Vận hành lao động tại nước ngoài",
     suggestedApis: [
-      'POST /overseas-records',
-      'POST /incident-logs',
-      'GET /overseas/contract-countdown'
-    ]
+      "POST /overseas-records",
+      "POST /incident-logs",
+      "GET /overseas/contract-countdown",
+    ],
   },
   {
-    module: 'M8',
-    title: 'Báo cáo điều hành',
+    module: "M8",
+    title: "Báo cáo điều hành",
     suggestedApis: [
-      'GET /reports/recruitment',
-      'GET /reports/finance',
-      'GET /reports/operations'
-    ]
-  }
+      "GET /reports/recruitment",
+      "GET /reports/finance",
+      "GET /reports/operations",
+    ],
+  },
 ];
 
 function RoadmapPage() {
+  const { t } = useI18n();
+
   return (
     <section className="page-grid">
       <div className="surface">
-        <SectionHeader title="Lộ trình" />
+        <SectionHeader title={t("roadmap.title")} />
         <div className="roadmap-grid stagger">
           {plans.map((plan) => (
             <article key={plan.module} className="roadmap-card">
               <p className="roadmap-module">{plan.module}</p>
               <h4>{plan.title}</h4>
-              <p className="roadmap-kicker">API dự kiến</p>
+              <p className="roadmap-kicker">{t("roadmap.plannedApis")}</p>
               <ul className="inline-list">
                 {plan.suggestedApis.map((api) => (
                   <li key={api}>{api}</li>

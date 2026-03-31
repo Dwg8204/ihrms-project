@@ -1,0 +1,344 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  position: relative;
+  z-index: 10;
+}
+
+.header__left {
+  display: flex;
+  align-items: center;
+}
+
+.header__logo {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #5b6cff 0%, #36d1c4 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.header__logo-icon {
+  font-size: 22px;
+  color: #fff;
+}
+
+.header__brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.header__brand-title {
+  font-weight: 700;
+  font-size: 18px;
+  color: #3a3a3a;
+}
+
+.header__brand-sub {
+  font-size: 11px;
+  color: #b0b3b8;
+  letter-spacing: 1px;
+  font-weight: 500;
+}
+
+.header__center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.header__search {
+  display: flex;
+  align-items: center;
+  background: #f4f6fa;
+  border-radius: 24px;
+  padding: 6px 16px;
+  min-width: 320px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.header__search-icon {
+  color: #b0b3b8;
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.header__search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  flex: 1;
+  font-size: 15px;
+  color: #3a3a3a;
+}
+
+.header__search-shortcut {
+  background: #e6e9f0;
+  color: #7a7a7a;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-left: 10px;
+}
+
+.header__right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.header__new-order {
+  background: linear-gradient(90deg, #5b6cff 0%, #36d1c4 100%);
+  color: #fff;
+  border: none;
+  border-radius: 24px;
+  padding: 8px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(91,108,255,0.08);
+}
+
+.header__new-order:hover {
+  box-shadow: 0 4px 16px rgba(91,108,255,0.16);
+}
+
+.header__icon {
+  font-size: 18px;
+  color: #b0b3b8;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.header__icon:hover {
+  color: #5b6cff;
+}
+
+.header__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.header__icon-button--active {
+  color: #4f46e5;
+  background: #e8eaff;
+  border-radius: 50%;
+}
+
+.header__icon-button:hover {
+  color: #374151;
+  transform: translateY(-1px);
+}
+
+.header__icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.header__bell-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.header__bell-dot {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  background: #ff3b3b;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.header__avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #5b6cff 0%, #36d1c4 100%);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  margin-left: 8px;
+  box-shadow: 0 2px 8px rgba(91,108,255,0.08);
+}
+
+.header__customize-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.28);
+  z-index: 40;
+}
+
+.header__customize-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(392px, 100vw);
+  height: 100vh;
+  padding: 16px 12px 18px;
+  background: #ffffff;
+  box-shadow: -18px 0 40px rgba(15, 23, 42, 0.12);
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.header__customize-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header__customize-head h3 {
+  margin: 0;
+  font-size: 19px;
+  color: #101828;
+}
+
+.header__customize-head p {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.header__customize-close {
+  border: none;
+  background: transparent;
+  color: #667085;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header__customize-section {
+  padding: 16px 0;
+  border-bottom: 1px solid #e9ecf5;
+}
+
+.header__customize-section h4 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #101828;
+}
+
+.header__customize-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.header__customize-grid--color {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.header__customize-option {
+  min-height: 72px;
+  border-radius: 16px;
+  border: 1px solid #d8ddeb;
+  background: #ffffff;
+  color: #4b5565;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.header__customize-option--active {
+  border: 2px solid #6346ff;
+  background: #f6f4ff;
+  color: #6346ff;
+}
+
+.header__customize-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.header__customize-option--color .header__customize-icon {
+  font-size: 0;
+}
+
+.header__customize-option--emerald .header__customize-icon,
+.header__customize-option--blue .header__customize-icon,
+.header__customize-option--violet .header__customize-icon,
+.header__customize-option--rose .header__customize-icon,
+.header__customize-option--orange .header__customize-icon,
+.header__customize-option--slate .header__customize-icon {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.16);
+}
+
+.header__customize-option--emerald .header__customize-icon {
+  background: #059669;
+}
+
+.header__customize-option--blue .header__customize-icon {
+  background: #1d4ed8;
+}
+
+.header__customize-option--violet .header__customize-icon {
+  background: #635bff;
+}
+
+.header__customize-option--rose .header__customize-icon {
+  background: #be2f7d;
+}
+
+.header__customize-option--orange .header__customize-icon {
+  background: #c94f00;
+}
+
+.header__customize-option--slate .header__customize-icon {
+  background: #6b7280;
+}
+
+.header__customize-reset {
+  width: 100%;
+  height: 42px;
+  margin-top: 16px;
+  border-radius: 16px;
+  border: 1px solid #d8ddeb;
+  background: #ffffff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
