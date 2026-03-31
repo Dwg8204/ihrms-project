@@ -1,23 +1,115 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import Layout from './components/Layout';
-import DashboardPage from './pages/DashboardPage';
-import RecruitmentPage from './pages/RecruitmentPage';
-import PartnersJobsPage from './pages/PartnersJobsPage';
-import DocumentsPage from './pages/DocumentsPage';
-import Module3Page from './pages/Module3Page';
-import RoadmapPage from './pages/RoadmapPage';
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import Header from "./components/Header";
+import Sidebar from "./components/Sidebar";
+import DashboardPage from "./pages/DashboardPage";
+import RecruitmentPage from "./pages/RecruitmentPage";
+import PartnersJobsPage from "./pages/PartnersJobsPage";
+import Module3Page from "./pages/Module3Page";
+import DocumentsPage from "./pages/DocumentsPage";
+import RoadmapPage from "./pages/RoadmapPage";
+import ChatPage from "./pages/ChatPage";
+import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "./i18n/I18nProvider";
+
+const defaultCustomizer = {
+  theme: "light",
+  color: "violet",
+  density: "compact",
+  layout: "sidebar",
+  container: "fluid",
+  direction: "ltr",
+  language: "vietnamese",
+};
+
+function AppLayout({ customizer, setCustomizer }) {
+  useEffect(() => {
+    document.documentElement.setAttribute("dir", customizer.direction);
+  }, [customizer.direction]);
+
+  const shellStyle = useMemo(
+    () => ({
+      minHeight: "100vh",
+      background:
+        customizer.theme === "dark"
+          ? "linear-gradient(180deg, rgb(20, 24, 41) 0%, rgb(31, 36, 58) 100%)"
+          : "linear-gradient(135deg, rgb(242, 248, 255) 0%, rgb(232, 241, 255) 100%)",
+      fontFamily: "Segoe UI, sans-serif",
+      color: customizer.theme === "dark" ? "#f7f8ff" : undefined,
+    }),
+    [customizer.theme]
+  );
+
+  const layoutStyle = useMemo(
+    () => ({
+      display: "flex",
+      minHeight: "calc(100vh - 72px)",
+      minWidth: 0,
+    }),
+    []
+  );
+
+  const densityPadding =
+    customizer.density === "compact"
+      ? "18px"
+      : customizer.density === "spacious"
+        ? "32px"
+        : "24px";
+
+  const mainStyle = useMemo(
+    () => ({
+      flex: 1,
+      minWidth: 0,
+      minHeight: 0,
+      padding: densityPadding,
+      maxWidth: customizer.container === "boxed" ? "1320px" : "none",
+      margin: customizer.container === "boxed" ? "0 auto" : "0",
+      width: "100%",
+    }),
+    [customizer.container, densityPadding]
+  );
+
+  return (
+    <div
+      style={shellStyle}
+      className={`app-customizer app-customizer--${customizer.color} app-customizer--${customizer.theme}`}
+    >
+      <Header customizer={customizer} setCustomizer={setCustomizer} />
+      <div style={layoutStyle}>
+        {customizer.layout === "sidebar" ? <Sidebar /> : null}
+        <main style={mainStyle}>
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
 
 function App() {
+  const { language, setLanguage } = useI18n();
+  const [customizer, setCustomizer] = useState(() => ({
+    ...defaultCustomizer,
+    language,
+  }));
+
+  useEffect(() => {
+    setLanguage(customizer.language);
+  }, [customizer.language, setLanguage]);
+
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route element={<AppLayout customizer={customizer} setCustomizer={setCustomizer} />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/module-1" element={<RecruitmentPage />} />
         <Route path="/module-2" element={<PartnersJobsPage />} />
         <Route path="/module-3" element={<Module3Page />} />
+        <Route path="/module-4" element={<RoadmapPage />} />
+        <Route path="/module-5" element={<RoadmapPage />} />
         <Route path="/module-6" element={<DocumentsPage />} />
+        <Route path="/module-7" element={<RoadmapPage />} />
+        <Route path="/mail" element={<ChatPage />} />
+        <Route path="/wizard" element={<ChatPage />} />
         <Route path="/roadmap" element={<RoadmapPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate replace to="/" />} />
       </Route>
     </Routes>
   );

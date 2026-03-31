@@ -15,7 +15,7 @@ const DOCUMENT_STATUSES = Object.freeze({
 const DocumentModel = {
   getDocumentTypes: async ({ phase = null }) => {
     const where = [];
-    const params = [];
+    const params = [];  
 
     if (phase) {
       where.push('phase = ?');
