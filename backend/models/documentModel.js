@@ -259,6 +259,7 @@ const DocumentModel = {
       `
       SELECT
         c.id AS candidate_id,
+        c.citizen_id,
         c.full_name,
         dt.code AS document_code,
         dt.name AS document_name,
@@ -287,6 +288,7 @@ const DocumentModel = {
       `
       SELECT
         c.id AS candidate_id,
+        c.citizen_id,
         c.full_name,
         dt.code AS document_code,
         dt.name AS document_name,

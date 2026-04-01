@@ -38,6 +38,7 @@ CREATE TABLE document_types (
 -- M1. Ứng viên (Phụ thuộc recruitment_sources)
 CREATE TABLE candidates (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    citizen_id VARCHAR(12) NOT NULL UNIQUE,
     full_name VARCHAR(150) NOT NULL,
     dob DATE,
     gender VARCHAR(10),

@@ -59,6 +59,11 @@ function getStatusTone(status) {
   return "";
 }
 
+function includesKeyword(value, keyword) {
+  if (!keyword) return true;
+  return String(value || "").toLowerCase().includes(keyword);
+}
+
 function DocumentsPage() {
   const [activeTab, setActiveTab] = useState("setup");
   const [loading, setLoading] = useState(false);
@@ -67,6 +72,7 @@ function DocumentsPage() {
   const [candidateId, setCandidateId] = useState("");
   const [phase, setPhase] = useState("PRE_EXAM");
   const [alertDays, setAlertDays] = useState(30);
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const [candidates, setCandidates] = useState([]);
   const [documentTypes, setDocumentTypes] = useState([]);
@@ -87,9 +93,27 @@ function DocumentsPage() {
     () =>
       candidates.map((candidate) => ({
         value: String(candidate.id),
-        label: `#${candidate.id} ${candidate.full_name}`,
+        label: `CCCD ${candidate.citizen_id || "-"} - ${candidate.full_name}`,
       })),
     [candidates]
+  );
+
+  const normalizedSearchKeyword = useMemo(
+    () => searchKeyword.trim().toLowerCase(),
+    [searchKeyword]
+  );
+
+  const selectedCandidate = useMemo(
+    () => candidates.find((item) => String(item.id) === String(candidateId)) || null,
+    [candidateId, candidates]
+  );
+
+  const filteredCandidateOptions = useMemo(
+    () =>
+      candidateOptions.filter((option) =>
+        includesKeyword(option.label, normalizedSearchKeyword)
+      ),
+    [candidateOptions, normalizedSearchKeyword]
   );
 
   const documentTypeMap = useMemo(() => {
@@ -101,6 +125,75 @@ function DocumentsPage() {
   const selectedDocumentType = useMemo(
     () => documentTypeMap.get(docForm.documentTypeCode) || null,
     [docForm.documentTypeCode, documentTypeMap]
+  );
+
+  const filteredDocumentTypes = useMemo(
+    () =>
+      documentTypes.filter((item) => {
+        if (!normalizedSearchKeyword) return true;
+        return [
+          getDocumentLabel(item),
+          getPhaseLabel(item.phase),
+          Number(item.is_required_for_gate) ? "bắt buộc" : "không bắt buộc",
+        ].some((value) => includesKeyword(value, normalizedSearchKeyword));
+      }),
+    [documentTypes, normalizedSearchKeyword]
+  );
+
+  const filteredDocuments = useMemo(
+    () =>
+      documents.filter((row) => {
+        if (!normalizedSearchKeyword) return true;
+        return [
+          getDocumentLabel(row),
+          DOC_STATUS_LABELS[row.status] || row.status,
+          row.code,
+        ].some((value) => includesKeyword(value, normalizedSearchKeyword));
+      }),
+    [documents, normalizedSearchKeyword]
+  );
+
+  const filteredMissingDocuments = useMemo(
+    () =>
+      (readiness?.missing_documents || []).filter((row) => {
+        if (!normalizedSearchKeyword) return true;
+        return [
+          getDocumentLabel(row),
+          DOC_STATUS_LABELS[row.status] || row.status,
+          row.code,
+        ].some((value) => includesKeyword(value, normalizedSearchKeyword));
+      }),
+    [readiness, normalizedSearchKeyword]
+  );
+
+  const filteredHealthAlerts = useMemo(
+    () =>
+      healthAlerts.filter((row) => {
+        if (!normalizedSearchKeyword) return true;
+        return [
+          row.citizen_id,
+          row.full_name,
+          row.document_name,
+          row.alert_level,
+        ].some((value) => includesKeyword(value, normalizedSearchKeyword));
+      }),
+    [healthAlerts, normalizedSearchKeyword]
+  );
+
+  const filteredVisaAlerts = useMemo(
+    () =>
+      visaAlerts.filter((row) => {
+        if (!normalizedSearchKeyword) return true;
+        return [row.citizen_id, row.full_name, row.document_name].some((value) =>
+          includesKeyword(value, normalizedSearchKeyword)
+        );
+      }),
+    [visaAlerts, normalizedSearchKeyword]
+  );
+
+  const isEvidenceFileRequired = useMemo(
+    () => docForm.status === "SUBMITTED" || docForm.status === "VERIFIED",
+    [docForm.status]
   );
 
   const phaseSummary = useMemo(() => {
@@ -224,6 +317,13 @@ function DocumentsPage() {
       setNotice({ type: "error", text: "Cần chọn loại giấy tờ." });
       return;
     }
+    if (isEvidenceFileRequired && !docForm.file) {
+      setNotice({
+        type: "error",
+        text: "Bắt buộc tải file minh chứng khi cập nhật trạng thái Đã nộp hoặc Đã xác minh.",
+      });
+      return;
+    }
 
     const payload = new FormData();
     Object.entries(docForm).forEach(([key, value]) => {
@@ -248,6 +348,13 @@ function DocumentsPage() {
     } catch (err) {
       showError(err);
     }
+  };
+
+  const handleResetDocForm = () => {
+    setDocForm((prev) => ({
+      ...initialDocForm,
+      documentTypeCode: prev.documentTypeCode,
+    }));
   };
 
   const handleRefreshAlerts = async () => {
@@ -277,37 +384,64 @@ function DocumentsPage() {
         ) : null}
         {loading ? <p className="muted">Đang tải dữ liệu M6...</p> : null}
 
-        <div className="filter-row">
-          <label className="inline-label">
-            Ứng viên
-            <select value={candidateId} onChange={(e) => setCandidateId(e.target.value)}>
-              <option value="">Chọn ứng viên</option>
-              {candidateOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="m6-toolbar">
+          <div className="m6-toolbar__filters">
+            <label className="inline-label m6-control">
+              Ứng viên
+              <select value={candidateId} onChange={(e) => setCandidateId(e.target.value)}>
+                <option value="">Chọn ứng viên</option>
+                {filteredCandidateOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="inline-label">
-            Giai đoạn
-            <select value={phase} onChange={(e) => setPhase(e.target.value)}>
-              {phaseOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <label className="inline-label m6-control">
+              Giai đoạn
+              <select value={phase} onChange={(e) => setPhase(e.target.value)}>
+                {phaseOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <button className="btn" type="button" onClick={handleInitDocs}>
-            Khởi tạo checklist
-          </button>
-          <button className="btn ghost" type="button" onClick={loadCandidateDocs} disabled={!candidateId}>
-            Tải checklist
-          </button>
+            <label className="inline-label m6-control">
+              Tìm kiếm
+              <input
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="Tìm theo CCCD, tên ứng viên, tên giấy tờ"
+              />
+            </label>
+          </div>
+
+          <div className="m6-toolbar__actions">
+            <button className="btn" type="button" onClick={handleInitDocs}>
+              Khởi tạo checklist
+            </button>
+            <button className="btn ghost" type="button" onClick={loadCandidateDocs} disabled={!candidateId}>
+              Tải checklist
+            </button>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => setSearchKeyword("")}
+              disabled={!searchKeyword.trim()}
+            >
+              Xóa tìm kiếm
+            </button>
+          </div>
         </div>
+
+        {selectedCandidate ? (
+          <p className="tiny muted m6-selected-candidate">
+            Đang thao tác: {selectedCandidate.citizen_id || "-"} - {selectedCandidate.full_name}
+          </p>
+        ) : null}
 
         <div className="stats-inline">
           <div className="mini-stat">
@@ -342,7 +476,7 @@ function DocumentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {documentTypes.map((item) => (
+                  {filteredDocumentTypes.map((item) => (
                     <tr key={item.code}>
                       <td>{getDocumentLabel(item)}</td>
                       <td>{getPhaseLabel(item.phase)}</td>
@@ -354,10 +488,10 @@ function DocumentsPage() {
                       <td>{getWarningText(item)}</td>
                     </tr>
                   ))}
-                  {!documentTypes.length ? (
+                  {!filteredDocumentTypes.length ? (
                     <tr>
                       <td colSpan={4} className="center muted">
-                        Chưa có loại giấy tờ.
+                        Không có giấy tờ nào khớp tìm kiếm.
                       </td>
                     </tr>
                   ) : null}
@@ -426,7 +560,17 @@ function DocumentsPage() {
 
               <label>
                 Tải file
-                <input type="file" onChange={(e) => setDocForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))} />
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                  required={isEvidenceFileRequired}
+                  onChange={(e) => setDocForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
+                />
+                {isEvidenceFileRequired ? (
+                  <span className="tiny">Bắt buộc tải file minh chứng cho trạng thái hiện tại.</span>
+                ) : (
+                  <span className="tiny muted">Khuyến nghị tải file để dễ kiểm tra hồ sơ.</span>
+                )}
               </label>
 
               <label className="field-span-2">
@@ -434,9 +578,14 @@ function DocumentsPage() {
                 <input value={docForm.note} onChange={(e) => setDocForm((prev) => ({ ...prev, note: e.target.value }))} />
               </label>
 
-              <button className="btn field-span-2" type="submit">
-                Cập nhật giấy tờ
-              </button>
+              <div className="field-span-2 row-actions">
+                <button className="btn" type="submit">
+                  Cập nhật giấy tờ
+                </button>
+                <button className="btn ghost" type="button" onClick={handleResetDocForm}>
+                  Đặt lại form
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -462,7 +611,7 @@ function DocumentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {documents.map((row) => (
+                {filteredDocuments.map((row) => (
                   <tr key={`${row.document_type_id}-${row.code}`}>
                     <td>{getDocumentLabel(row)}</td>
                     <td>
@@ -476,10 +625,10 @@ function DocumentsPage() {
                     <td>{formatDateTime(row.verified_at || row.submitted_at)}</td>
                   </tr>
                 ))}
-                {!documents.length ? (
+                {!filteredDocuments.length ? (
                   <tr>
                     <td colSpan={6} className="center muted">
-                      Chưa có checklist cho ứng viên này.
+                      Không có checklist khớp điều kiện tìm kiếm.
                     </td>
                   </tr>
                 ) : null}
@@ -530,7 +679,7 @@ function DocumentsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(readiness.missing_documents || []).map((row) => (
+                      {filteredMissingDocuments.map((row) => (
                         <tr key={row.code}>
                           <td>{getDocumentLabel(row)}</td>
                           <td>
@@ -540,10 +689,12 @@ function DocumentsPage() {
                           </td>
                         </tr>
                       ))}
-                      {!readiness.missing_documents?.length ? (
+                      {!filteredMissingDocuments.length ? (
                         <tr>
                           <td colSpan={2} className="center success-text">
-                            Ứng viên đã đủ điều kiện trước thi.
+                            {readiness.missing_documents?.length
+                              ? "Không có giấy tờ thiếu nào khớp tìm kiếm."
+                              : "Ứng viên đã đủ điều kiện trước thi."}
                           </td>
                         </tr>
                       ) : null}
@@ -601,18 +752,18 @@ function DocumentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {healthAlerts.map((row) => (
+                  {filteredHealthAlerts.map((row) => (
                     <tr key={`${row.candidate_id}-${row.expiration_date}`}>
-                      <td>{row.full_name}</td>
+                      <td>{`${row.citizen_id || "-"} - ${row.full_name}`}</td>
                       <td>{formatDate(row.expiration_date)}</td>
                       <td>{row.days_left} ngày</td>
                       <td>{row.alert_level || "-"}</td>
                     </tr>
                   ))}
-                  {!healthAlerts.length ? (
+                  {!filteredHealthAlerts.length ? (
                     <tr>
                       <td colSpan={4} className="center muted">
-                        Chưa có cảnh báo sức khỏe.
+                        Không có cảnh báo sức khỏe khớp tìm kiếm.
                       </td>
                     </tr>
                   ) : null}
@@ -633,17 +784,17 @@ function DocumentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visaAlerts.map((row) => (
+                  {filteredVisaAlerts.map((row) => (
                     <tr key={`${row.candidate_id}-${row.expected_complete_date}`}>
-                      <td>{row.full_name}</td>
+                      <td>{`${row.citizen_id || "-"} - ${row.full_name}`}</td>
                       <td>{formatDate(row.expected_complete_date)}</td>
                       <td>{row.overdue_days} ngày</td>
                     </tr>
                   ))}
-                  {!visaAlerts.length ? (
+                  {!filteredVisaAlerts.length ? (
                     <tr>
                       <td colSpan={3} className="center muted">
-                        Chưa có cảnh báo visa.
+                        Không có cảnh báo visa khớp tìm kiếm.
                       </td>
                     </tr>
                   ) : null}
