@@ -9,6 +9,8 @@ const documentRoutes = require('./routes/documentRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const jobOrderRoutes = require('./routes/jobOrderRoutes');
 const examApplicationRoutes = require('./routes/examApplicationRoutes');
+const contractRoutes = require('./routes/contractRoutes');
+const educationLevelRoutes = require('./routes/educationLevelRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const cron = require('node-cron');
 const JobOrder = require('./models/jobOrderModel');
@@ -32,6 +34,8 @@ app.use('/api', documentRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/job-orders', jobOrderRoutes);
 app.use('/api/exam-applications', examApplicationRoutes);
+app.use('/api/contracts', contractRoutes);
+app.use('/api/education-levels', educationLevelRoutes);
 
 cron.schedule('0 0 * * *', async () => {
     console.log('Running daily cron job for job orders...');

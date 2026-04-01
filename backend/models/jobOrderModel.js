@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const { JOB_ORDER_STATUSES } = require('../utils/jobOrderStatus');
+const DocumentModel = require('./documentModel');
+const EducationLevel = require('./educationLevelModel');
 
 class JobOrder {
   static async create(jobOrderData) {
@@ -202,29 +204,32 @@ class JobOrder {
             throw new Error(`Job Order is not open for matching. Current status: ${jobOrder.status}`);
         }
 
-        const requirements = jobOrder.requirements;
+        const requirements = jobOrder.requirements || {};
         let candidateQuery = `
-            SELECT 
-                c.*, 
+            SELECT
+                c.*,
+                el.name AS education_level_name, -- Join to get education level name
                 GROUP_CONCAT(dt.code ORDER BY dt.display_order ASC) AS verified_doc_codes,
                 GROUP_CONCAT(dt.name ORDER BY dt.display_order ASC) AS verified_doc_names
             FROM candidates c
+            LEFT JOIN education_levels el ON c.education_level = el.id -- Join education_levels
             LEFT JOIN candidate_documents cd ON c.id = cd.candidate_id
             LEFT JOIN document_types dt ON cd.document_type_id = dt.id
-            WHERE c.status = ? 
+            WHERE c.status = ?
             AND c.is_fee0_paid = 1
-            AND cd.status = 'VERIFIED' 
+            AND cd.status = 'VERIFIED'
             AND dt.phase = 'PRE_EXAM'
             AND dt.is_required_for_gate = 1
         `;
-        let countQuery = `
+      let countQuery = `
             SELECT COUNT(DISTINCT c.id) AS total_candidates
             FROM candidates c
+            LEFT JOIN education_levels el ON c.education_level = el.id
             LEFT JOIN candidate_documents cd ON c.id = cd.candidate_id
             LEFT JOIN document_types dt ON cd.document_type_id = dt.id
-            WHERE c.status = ? 
+            WHERE c.status = ?
             AND c.is_fee0_paid = 1
-            AND cd.status = 'VERIFIED' 
+            AND cd.status = 'VERIFIED'
             AND dt.phase = 'PRE_EXAM'
             AND dt.is_required_for_gate = 1
         `;
@@ -277,9 +282,10 @@ class JobOrder {
 
             // Yêu cầu về trình độ học vấn
             if (requirements.education_level && requirements.education_level.length > 0 && candidate.education_level) {
-                if (!requirements.education_level.some(level => candidate.education_level.includes(level))) {
-                    return false;
-                }
+          // requirements.education_level will be an array of IDs
+              if (!requirements.education_level.includes(candidate.education_level)) {
+                return false;
+              }
             }
 
             // Yêu cầu về số năm kinh nghiệm (đơn giản hóa, dựa trên bảng tóm tắt kinh nghiệm)
@@ -322,6 +328,67 @@ class JobOrder {
     } catch (error) {
         throw error;
     }
+  }
+
+  // --- Phương pháp mới để ghép nối thủ công ---
+  static async manualMatchCandidate(jobOrderId, candidateId) {
+      try {
+          const jobOrder = await this.findById(jobOrderId);
+          if (!jobOrder) {
+              throw new Error('Job Order not found.');
+          }
+          if (jobOrder.status !== JOB_ORDER_STATUSES.OPEN) {
+              throw new Error(`Job Order is not open for matching. Current status: ${jobOrder.status}`);
+          }
+
+          const CandidateModel = require('./candidateModel'); // Import here to avoid circular dependency
+          const candidate = await CandidateModel.getById(candidateId);
+          if (!candidate) {
+              throw new Error('Candidate not found.');
+          }
+          if (candidate.status !== 'WAITING_FORM_MATCH') {
+              throw new Error(`Candidate must be in WAITING_FORM_MATCH status for manual matching. Current status: ${candidate.status}`);
+          }
+
+          // Kiểm tra trạng thái đã thanh toán phí 0
+          if (!candidate.is_fee0_paid) {
+            throw new Error('Candidate has not paid Fee 0 (is_fee0_paid = 0), cannot manually match.');
+          }
+
+          // Kiểm tra 7 tài liệu PRE_EXAM
+          const readiness = await DocumentModel.getPreExamReadiness(candidateId);
+          if (!readiness.can_proceed) {
+            throw new Error(`Candidate is missing required PRE_EXAM documents for manual matching. Missing: ${readiness.missing_documents.map(d => d.name).join(', ')}`);
+          }
+
+          // Kiểm tra xem ứng viên đã tham gia kỳ thi cho vị trí tuyển dụng này chưa (để tránh đăng ký trùng lặp).
+          const [existingApp] = await db.query('SELECT id FROM exam_applications WHERE candidate_id = ? AND job_order_id = ?', [candidateId, jobOrderId]);
+          if (existingApp.length > 0) {
+              throw new Error('Candidate is already registered for an exam with this job order.');
+          }
+
+          // Đến bước này, các điều kiện cơ bản để tạo đơn đăng ký thi đã được đáp ứng..
+          // Các yêu cầu của JSON (tuổi, giới tính, trình độ học vấn, v.v.) được cố ý bỏ qua để thực hiện đối sánh thủ công.
+
+          // Tạo một đơn đăng ký thi để thể hiện sự phù hợp.
+          // Cần nhập mô hình ExamApplication ở đây, hoặc trừu tượng hóa điều này thành một lớp dịch vụ.
+          const ExamApplication = require('./examApplicationModel'); // Nhập khẩu tại đây để tránh phụ thuộc vòng lặp
+          const examAppData = {
+              candidate_id: candidateId,
+              job_order_id: jobOrderId,
+              exam_date: null, // Hiện chưa có ngày thi cụ thể cho hình thức thi đối sánh thủ công, sẽ được cập nhật sau.
+              note: 'Manual match',
+              result_status: 'Pending'
+          };
+          const newExamApp = await ExamApplication.create(examAppData); // Điều này cũng sẽ xử lý việc chuyển đổi trạng thái ứng viên.
+
+          // Tự động chuyển đổi trạng thái ứng viên (nếu chưa được xử lý bởi ExamApplication.create)
+          await CandidateModel.transitionStatus(candidateId, 'FORM_MATCHED_WAITING_EXAM', { jobOrderId: jobOrderId });
+
+          return newExamApp; // Trả lại đơn đăng ký thi đã tạo
+      } catch (error) {
+          throw error;
+      }
   }
 
   // --- Cron job related methods ---

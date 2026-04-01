@@ -1,6 +1,8 @@
 const Candidate = require('../models/candidateModel');
 const RecruitmentSource = require('../models/recruitmentSourceModel');
 const DocumentModel = require('../models/documentModel');
+const EducationLevel = require('../models/educationLevelModel');
+
 const {
   CANDIDATE_STATUSES,
   STATUS_ORDER,

@@ -11,4 +11,6 @@ router.delete('/:id', jobOrderController.softDeleteJobOrder); // Soft delete (ca
 // Matching candidates
 router.get('/:jobOrderId/matching-candidates', jobOrderController.getMatchingCandidates);
 
+router.post('/:jobOrderId/manual-match', jobOrderController.manualMatchCandidateToJobOrder);
+
 module.exports = router;
