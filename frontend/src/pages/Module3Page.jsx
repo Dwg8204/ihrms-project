@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import SectionHeader from "../components/SectionHeader";
 import SegmentTabs from "../components/SegmentTabs";
+import { useToast } from "../components/ToastProvider";
 import { recruitmentService } from "../services/recruitmentService";
 import { jobOrderService } from "../services/jobOrderService";
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from "../utils/constants";
@@ -63,7 +64,7 @@ function getCandidateLabel(candidate) {
 function Module3Page() {
   const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState("exam-list");
-  const [notice, setNotice] = useState({ type: "", text: "" });
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [jobOrders, setJobOrders] = useState([]);
@@ -86,7 +87,6 @@ function Module3Page() {
   useEffect(() => {
     async function loadMasterData() {
       setLoading(true);
-      setNotice({ type: "", text: "" });
       try {
         const [candRes, jobRes, kanbanRes] = await Promise.all([
           recruitmentService.getCandidates({ page: 1, limit: 200 }),
@@ -98,7 +98,7 @@ function Module3Page() {
         setJobOrders(jobRes.data || []);
         setKanbanBoard(kanbanRes.data || []);
       } catch (err) {
-        setNotice({ type: "error", text: getErrorMessage(err) });
+        toast.error(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -163,7 +163,6 @@ function Module3Page() {
 
   const loadMasterData = async () => {
     setLoading(true);
-    setNotice({ type: "", text: "" });
     try {
       const [candRes, jobRes, kanbanRes] = await Promise.all([
         recruitmentService.getCandidates({ page: 1, limit: 200 }),
@@ -175,7 +174,7 @@ function Module3Page() {
       setJobOrders(jobRes.data || []);
       setKanbanBoard(kanbanRes.data || []);
     } catch (err) {
-      setNotice({ type: "error", text: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -190,19 +189,15 @@ function Module3Page() {
       )
     );
 
-    setNotice({
-      type: "ok",
-      text:
-        resultStatus === "FAIL"
-          ? t("module3.noticeExamFailed")
-          : t("module3.noticeExamUpdated"),
-    });
+    toast.success(
+      resultStatus === "FAIL" ? t("module3.noticeExamFailed") : t("module3.noticeExamUpdated")
+    );
   };
 
   const handleCreateExamRecord = (event) => {
     event.preventDefault();
     if (!examForm.candidateId || !examForm.jobOrderId || !examForm.examDate) {
-      setNotice({ type: "error", text: t("module3.noticeExamRequired") });
+      toast.error(t("module3.noticeExamRequired"));
       return;
     }
 
@@ -219,13 +214,13 @@ function Module3Page() {
 
     setExamRecords((prev) => [newRecord, ...prev]);
     setExamForm(initialExamForm);
-    setNotice({ type: "ok", text: t("module3.noticeExamAdded") });
+    toast.success(t("module3.noticeExamAdded"));
   };
 
   const handleCreateTrainingRecord = (event) => {
     event.preventDefault();
     if (!trainingForm.candidateId || !trainingForm.moduleName || !trainingForm.sessionDate) {
-      setNotice({ type: "error", text: t("module3.noticeTrainingRequired") });
+      toast.error(t("module3.noticeTrainingRequired"));
       return;
     }
 
@@ -243,7 +238,7 @@ function Module3Page() {
 
     setTrainingRecords((prev) => [newRecord, ...prev]);
     setTrainingForm(initialTrainingForm);
-    setNotice({ type: "ok", text: t("module3.noticeTrainingSaved") });
+    toast.success(t("module3.noticeTrainingSaved"));
   };
 
   const tabs = [
@@ -265,12 +260,6 @@ function Module3Page() {
             </button>
           }
         />
-
-        {notice.text ? (
-          <p className={notice.type === "error" ? "error-text" : "success-text"}>
-            {notice.text}
-          </p>
-        ) : null}
 
         {loading ? <p className="muted">{t("module3.loading")}</p> : null}
 

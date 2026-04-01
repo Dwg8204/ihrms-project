@@ -12,6 +12,10 @@ const DOCUMENT_STATUSES = Object.freeze({
   REJECTED: 'REJECTED'
 });
 
+function isSubmittedOrVerified(status) {
+  return status === DOCUMENT_STATUSES.SUBMITTED || status === DOCUMENT_STATUSES.VERIFIED;
+}
+
 const DocumentModel = {
   getDocumentTypes: async ({ phase = null }) => {
     const where = [];
@@ -243,14 +247,24 @@ const DocumentModel = {
     );
 
     const required_total = rows.length;
+    const submitted_total = rows.filter((r) => isSubmittedOrVerified(r.status)).length;
     const verified_total = rows.filter((r) => r.status === DOCUMENT_STATUSES.VERIFIED).length;
-    const missing_documents = rows.filter((r) => r.status !== DOCUMENT_STATUSES.VERIFIED);
+    const missing_submitted_documents = rows.filter((r) => !isSubmittedOrVerified(r.status));
+    const missing_verified_documents = rows.filter((r) => r.status !== DOCUMENT_STATUSES.VERIFIED);
+
+    const can_submit_profile = required_total > 0 && submitted_total === required_total;
+    const can_proceed_verified = required_total > 0 && verified_total === required_total;
 
     return {
       required_total,
+      submitted_total,
       verified_total,
-      can_proceed: required_total > 0 && required_total === verified_total,
-      missing_documents
+      can_submit_profile,
+      can_proceed_verified,
+      can_proceed: can_proceed_verified,
+      missing_submitted_documents,
+      missing_verified_documents,
+      missing_documents: missing_verified_documents
     };
   },
 

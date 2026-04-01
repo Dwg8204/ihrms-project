@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import SectionHeader from "../components/SectionHeader";
 import SegmentTabs from "../components/SegmentTabs";
+import { useToast } from "../components/ToastProvider";
 import StatCard from "../components/StatCard";
 import BarChart from "../components/BarChart";
 import { recruitmentService } from "../services/recruitmentService";
@@ -38,8 +39,8 @@ function getDebtAgingBuckets(candidates) {
 
 function DashboardPage() {
   const { t } = useI18n();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("recruitment");
 
   const [summary, setSummary] = useState({ by_status: [], by_source: [] });
@@ -52,7 +53,6 @@ function DashboardPage() {
 
     async function run() {
       setLoading(true);
-      setError("");
       try {
         const [funnelRes, healthRes, visaRes, candidateRes] = await Promise.all([
           recruitmentService.getFunnelSummary(),
@@ -68,7 +68,7 @@ function DashboardPage() {
         setCandidates(candidateRes?.data || []);
       } catch (err) {
         if (!alive) return;
-        setError(getErrorMessage(err));
+        toast.error(getErrorMessage(err));
       } finally {
         if (alive) setLoading(false);
       }
@@ -148,7 +148,6 @@ function DashboardPage() {
         <SectionHeader title={t("dashboard.title")} />
 
         {loading ? <p className="muted">{t("dashboard.loading")}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
 
         <div className="stats-grid stagger">
           <StatCard
