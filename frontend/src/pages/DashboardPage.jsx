@@ -230,7 +230,7 @@ function DashboardPage() {
               <tbody>
                 {healthAlerts.map((row) => (
                   <tr key={`${row.candidate_id}-${row.expiration_date}`}>
-                    <td>{row.full_name}</td>
+                    <td>{`${row.citizen_id || "-"} - ${row.full_name}`}</td>
                     <td>{formatDate(row.expiration_date)}</td>
                     <td>
                       <span
@@ -267,7 +267,7 @@ function DashboardPage() {
               <tbody>
                 {visaAlerts.map((row) => (
                   <tr key={`${row.candidate_id}-${row.expected_complete_date}`}>
-                    <td>{row.full_name}</td>
+                    <td>{`${row.citizen_id || "-"} - ${row.full_name}`}</td>
                     <td>{formatDate(row.expected_complete_date)}</td>
                     <td>
                       <span className="badge danger">

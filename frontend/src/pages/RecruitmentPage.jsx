@@ -10,6 +10,7 @@ import { formatDate, formatDateTime, formatCurrency } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
 
 const initialCandidateForm = {
+  citizen_id: '',
   full_name: '',
   dob: '',
   gender: '',
@@ -57,6 +58,7 @@ function toDateTimeLocal(value) {
 
 function toCandidateForm(candidate) {
   return {
+    citizen_id: candidate.citizen_id || '',
     full_name: candidate.full_name || '',
     dob: candidate.dob ? String(candidate.dob).slice(0, 10) : '',
     gender: candidate.gender || '',
@@ -451,6 +453,18 @@ function RecruitmentPage() {
   const renderCandidateForm = (form, onFieldChange, submitLabel, onSubmit, isEdit = false) => (
     <form className="grid-form" onSubmit={onSubmit}>
       <label>
+        Căn cước công dân
+        <input
+          required
+          value={form.citizen_id}
+          onChange={(e) => onFieldChange('citizen_id', e.target.value)}
+          placeholder="12 chữ số"
+          inputMode="numeric"
+          pattern="\d{12}"
+          maxLength={12}
+        />
+      </label>
+      <label>
         Họ và tên
         <input
           required
@@ -605,6 +619,7 @@ function RecruitmentPage() {
             {candidateDetail ? (
               <div className="roadmap-card">
                 <ul className="inline-list">
+                  <li>CCCD: {candidateDetail.citizen_id || '-'}</li>
                   <li>Họ tên: {candidateDetail.full_name || '-'}</li>
                   <li>Điện thoại: {candidateDetail.phone || '-'}</li>
                   <li>Email: {candidateDetail.email || '-'}</li>
@@ -750,7 +765,7 @@ function RecruitmentPage() {
 
           <div className="filter-row">
             <input
-              placeholder="Tìm theo tên, điện thoại, email"
+              placeholder="Tìm theo CCCD, tên, điện thoại, email"
               value={filters.search}
               onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
             />
@@ -785,7 +800,7 @@ function RecruitmentPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>ID</th>
+                  <th>CCCD</th>
                   <th>Ứng viên</th>
                   <th>Nguồn</th>
                   <th>Trạng thái</th>
@@ -802,7 +817,7 @@ function RecruitmentPage() {
 
                   return (
                     <tr key={row.id}>
-                      <td>{row.id}</td>
+                      <td>{row.citizen_id || '-'}</td>
                       <td>
                         <strong>{row.full_name}</strong>
                         <br />
@@ -954,7 +969,7 @@ function RecruitmentPage() {
           {candidateDetail ? (
             <div className="surface" style={{ marginTop: 14 }}>
               <SectionHeader
-                title={`Chi tiết ứng viên #${candidateDetail.id}`}
+                title={`Chi tiết ứng viên CCCD ${candidateDetail.citizen_id || '-'}`}
                 action={
                   <button className="btn text" type="button" onClick={() => setCandidateDetail(null)}>
                     Đóng
@@ -963,6 +978,10 @@ function RecruitmentPage() {
               />
 
               <div className="stats-inline">
+                <div className="mini-stat">
+                  <span>CCCD</span>
+                  <strong>{candidateDetail.citizen_id || '-'}</strong>
+                </div>
                 <div className="mini-stat">
                   <span>Ứng viên</span>
                   <strong>{candidateDetail.full_name || '-'}</strong>
@@ -987,38 +1006,42 @@ function RecruitmentPage() {
                 <table className="data-table">
                   <tbody>
                     <tr>
+                      <th>CCCD</th>
+                      <td>{candidateDetail.citizen_id || '-'}</td>
                       <th>Điện thoại</th>
                       <td>{candidateDetail.phone || '-'}</td>
+                    </tr>
+                    <tr>
                       <th>Email</th>
                       <td>{candidateDetail.email || '-'}</td>
-                    </tr>
-                    <tr>
                       <th>Ngày sinh</th>
                       <td>{formatDate(candidateDetail.dob)}</td>
+                    </tr>
+                    <tr>
                       <th>Giới tính</th>
                       <td>{candidateDetail.gender || '-'}</td>
-                    </tr>
-                    <tr>
                       <th>Chiều cao</th>
                       <td>{candidateDetail.height ?? '-'}</td>
-                      <th>Cân nặng</th>
-                      <td>{candidateDetail.weight ?? '-'}</td>
                     </tr>
                     <tr>
+                      <th>Cân nặng</th>
+                      <td>{candidateDetail.weight ?? '-'}</td>
                       <th>Nhóm máu</th>
                       <td>{candidateDetail.blood_type || '-'}</td>
+                    </tr>
+                    <tr>
                       <th>Phí đợt 0</th>
                       <td>
                         {candidateDetail.is_fee0_paid
                           ? formatCurrency(candidateDetail.fee0_paid_amount)
                           : 'Chưa đóng'}
                       </td>
-                    </tr>
-                    <tr>
                       <th>Học vấn</th>
                       <td>{candidateDetail.education_level || '-'}</td>
+                    </tr>
+                    <tr>
                       <th>Kinh nghiệm</th>
-                      <td>{candidateDetail.experience_summary || '-'}</td>
+                      <td colSpan={3}>{candidateDetail.experience_summary || '-'}</td>
                     </tr>
                     <tr>
                       <th>Địa chỉ</th>
@@ -1060,7 +1083,9 @@ function RecruitmentPage() {
 
           {editingCandidateId ? (
             <div className="surface" style={{ marginTop: 14 }}>
-              <SectionHeader title={`Sửa ứng viên #${editingCandidateId}`} />
+              <SectionHeader
+                title={`Sửa ứng viên CCCD ${candidateDetail?.citizen_id || editForm.citizen_id || '-'}`}
+              />
               {renderCandidateForm(
                 editForm,
                 (key, value) => setEditForm((prev) => ({ ...prev, [key]: value })),

@@ -47,6 +47,16 @@ function toNullableBoolean(value) {
   return NaN;
 }
 
+function normalizeCitizenId(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return '';
+  return String(value).trim();
+}
+
+function isValidCitizenId(value) {
+  return /^\d{12}$/.test(String(value || ''));
+}
+
 function pickField(body, snakeKey, camelKey) {
   if (Object.prototype.hasOwnProperty.call(body, snakeKey)) {
     return body[snakeKey];
@@ -59,6 +69,9 @@ function pickField(body, snakeKey, camelKey) {
 
 function normalizeCandidatePayload(body) {
   return {
+    citizen_id: normalizeCitizenId(
+      pickField(body, 'citizen_id', 'citizenId') ?? pickField(body, 'cccd', 'cccd')
+    ),
     full_name: pickField(body, 'full_name', 'fullName'),
     dob: pickField(body, 'dob', 'dob'),
     gender: pickField(body, 'gender', 'gender'),
@@ -93,6 +106,23 @@ async function validateSourceMandatory(sourceId) {
   if (!source) {
     throw createHttpError('source_id does not exist', 400);
   }
+}
+
+function validateCitizenIdRequired(citizenId) {
+  if (!citizenId || !isValidCitizenId(citizenId)) {
+    throw createHttpError('citizen_id is required and must be exactly 12 digits', 400);
+  }
+}
+
+async function validateCitizenIdUnique(citizenId, excludeCandidateId = null) {
+  const existing = await Candidate.getByCitizenId(citizenId);
+  if (!existing) return;
+
+  if (excludeCandidateId && Number(existing.id) === Number(excludeCandidateId)) {
+    return;
+  }
+
+  throw createHttpError('citizen_id already exists', 409);
 }
 
 async function validatePreExamGate(candidate) {
@@ -163,6 +193,9 @@ const candidateController = {
         return next(createHttpError('full_name is required', 400));
       }
       payload.full_name = String(payload.full_name).trim();
+
+      validateCitizenIdRequired(payload.citizen_id);
+      await validateCitizenIdUnique(payload.citizen_id);
 
       await validateSourceMandatory(payload.source_id);
 
@@ -236,6 +269,11 @@ const candidateController = {
       }
       if (payload.full_name !== undefined) {
         payload.full_name = String(payload.full_name).trim();
+      }
+
+      if (payload.citizen_id !== undefined) {
+        validateCitizenIdRequired(payload.citizen_id);
+        await validateCitizenIdUnique(payload.citizen_id, id);
       }
 
       if (payload.source_id !== undefined) {

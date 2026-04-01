@@ -55,6 +55,7 @@ class ExamApplication {
             SELECT
                 ea.*,
                 c.full_name AS candidate_name,
+                c.citizen_id AS candidate_citizen_id,
                 c.status AS candidate_status,
                 jo.job_title,
                 jo.partner_id,
@@ -119,6 +120,7 @@ class ExamApplication {
             SELECT
                 ea.*,
                 c.full_name AS candidate_name,
+                c.citizen_id AS candidate_citizen_id,
                 c.status AS candidate_status,
                 jo.job_title,
                 jo.partner_id,

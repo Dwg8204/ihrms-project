@@ -4,6 +4,7 @@ const DocumentModel = require('./documentModel');
 const JobOrder = require('./jobOrderModel');
 
 const ALLOWED_UPDATE_FIELDS = [
+  'citizen_id',
   'full_name',
   'dob',
   'gender',
@@ -31,8 +32,8 @@ const Candidate = {
     const params = [];
 
     if (search) {
-      where.push('(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)');
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      where.push('(c.citizen_id LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (status) {
@@ -58,6 +59,7 @@ const Candidate = {
     const dataQuery = `
       SELECT
         c.id,
+        c.citizen_id,
         c.full_name,
         c.dob,
         c.gender,
@@ -102,6 +104,7 @@ const Candidate = {
       `
       SELECT
         c.id,
+        c.citizen_id,
         c.full_name,
         c.dob,
         c.gender,
@@ -133,18 +136,56 @@ const Candidate = {
     return rows[0] || null;
   },
 
+  getByCitizenId: async (citizenId) => {
+    const [rows] = await db.query(
+      `
+      SELECT
+        c.id,
+        c.citizen_id,
+        c.full_name,
+        c.dob,
+        c.gender,
+        c.phone,
+        c.email,
+        c.address,
+        c.height,
+        c.weight,
+        c.blood_type,
+        c.education_level,
+        c.experience_summary,
+        c.source_id,
+        c.source_note,
+        c.status,
+        c.is_fee0_paid,
+        c.fee0_paid_amount,
+        c.fee0_paid_at,
+        c.cv_file_url,
+        c.created_at,
+        c.updated_at,
+        s.source_name
+      FROM candidates c
+      LEFT JOIN recruitment_sources s ON c.source_id = s.id
+      WHERE c.citizen_id = ?
+      LIMIT 1
+      `,
+      [citizenId]
+    );
+    return rows[0] || null;
+  },
+
   create: async (candidateData) => {
     const query = `
       INSERT INTO candidates
       (
-        full_name, dob, gender, phone, email, address, height, weight,
+        citizen_id, full_name, dob, gender, phone, email, address, height, weight,
         blood_type, education_level, experience_summary, source_id, source_note,
         status, is_fee0_paid, fee0_paid_amount, fee0_paid_at, cv_file_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
+      candidateData.citizen_id,
       candidateData.full_name,
       candidateData.dob || null,
       candidateData.gender || null,
@@ -354,6 +395,7 @@ const Candidate = {
       FROM (
         SELECT
           c.id,
+          c.citizen_id,
           c.full_name,
           c.phone,
           c.email,

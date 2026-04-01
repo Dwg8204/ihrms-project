@@ -55,6 +55,11 @@ function getInitials(name) {
     .join("");
 }
 
+function getCandidateLabel(candidate) {
+  if (!candidate) return "-";
+  return `CCCD ${candidate.citizen_id || "-"} - ${candidate.full_name || "-"}`;
+}
+
 function Module3Page() {
   const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState("exam-list");
@@ -310,9 +315,7 @@ function Module3Page() {
                         </span>
                       </div>
 
-                      <h5>
-                        #{candidate.id} {candidate.full_name}
-                      </h5>
+                      <h5>{getCandidateLabel(candidate)}</h5>
                       <p>{candidate.phone || candidate.email || "Chưa có thông tin liên hệ"}</p>
                       <div className="kanban-task__details">
                         <span>{candidate.email || "Chưa có email"}</span>
@@ -368,7 +371,7 @@ function Module3Page() {
                   <option value="">{t("common.chooseCandidate")}</option>
                   {eligibleExamCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>
-                      #{candidate.id} {candidate.full_name} (
+                      {getCandidateLabel(candidate)} (
                       {CANDIDATE_STATUS_LABELS[candidate.status] || candidate.status})
                     </option>
                   ))}
@@ -539,7 +542,7 @@ function Module3Page() {
                   <option value="">{t("common.chooseCandidate")}</option>
                   {passedCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>
-                      #{candidate.id} {candidate.full_name}
+                      {getCandidateLabel(candidate)}
                     </option>
                   ))}
                 </select>

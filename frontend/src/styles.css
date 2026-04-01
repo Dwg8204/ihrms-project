@@ -431,6 +431,35 @@ label {
   font-weight: 700;
 }
 
+.m6-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.m6-toolbar__filters {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1.6fr;
+  gap: 10px;
+}
+
+.m6-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.m6-control {
+  display: grid;
+  gap: 6px;
+  align-items: start;
+}
+
+.m6-selected-candidate {
+  margin: 0 0 10px;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -1461,6 +1490,14 @@ label {
 
   .grid-form {
     grid-template-columns: 1fr;
+  }
+
+  .m6-toolbar__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .m6-toolbar__actions {
+    justify-content: flex-start;
   }
 
   .field-span-2 {
