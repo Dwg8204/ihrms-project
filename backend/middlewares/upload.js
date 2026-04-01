@@ -9,14 +9,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'ihrms_cvs',
-    allowed_formats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-    resource_type: 'auto'
-  }
-});
+// const storage = new CloudinaryStorage({
+//   cloudinary,
+//   params: {
+//     folder: 'ihrms_cvs',
+//     allowed_formats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+//     resource_type: 'auto'
+//   }
+// });
 
 const allowedMimeTypes = new Set([
   'application/pdf',
@@ -33,10 +33,38 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }
-});
+// Tạo một hàm factory để cấu hình multer với thư mục động.
+const createCloudinaryUploader = (folderName) => {
+  const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: folderName, // Thư mục động
+      allowed_formats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+      resource_type: 'auto'
+    }
+  });
 
-module.exports = upload;
+  return multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 }
+  });
+};
+
+// const upload = multer({
+//   storage,
+//   fileFilter,
+//   limits: { fileSize: 5 * 1024 * 1024 }
+// });
+
+// Xuất trình tải lên cụ thể
+const uploadCvs = createCloudinaryUploader('ihrms_cvs');
+const uploadContracts = createCloudinaryUploader('ihrms_contracts');
+const uploadTemplates = createCloudinaryUploader('ihrms_contract_templates'); // Thư mục mới dành cho các mẫu
+
+// module.exports = upload;
+module.exports = {
+  uploadCvs,
+  uploadContracts,
+  uploadTemplates
+};

@@ -2,6 +2,7 @@ const db = require('../config/db');
 const { CANDIDATE_STATUSES, STATUS_ORDER, canTransition } = require('../utils/candidateStatus');
 const DocumentModel = require('./documentModel');
 const JobOrder = require('./jobOrderModel');
+const EducationLevel = require('./educationLevelModel'); 
 
 const ALLOWED_UPDATE_FIELDS = [
   'citizen_id',
@@ -174,6 +175,13 @@ const Candidate = {
   },
 
   create: async (candidateData) => {
+    // Xác thực trường education_level nếu có
+    if (candidateData.education_level !== null && candidateData.education_level !== undefined) {
+        const level = await EducationLevel.findById(candidateData.education_level);
+        if (!level) {
+            throw new Error(`Invalid education_level ID: ${candidateData.education_level}.`);
+        }
+    }
     const query = `
       INSERT INTO candidates
       (
@@ -213,6 +221,16 @@ const Candidate = {
   update: async (id, candidateData) => {
     const updates = [];
     const values = [];
+
+    // Xác thực trường education_level nếu có
+    if (candidateData.education_level !== undefined) {
+        if (candidateData.education_level !== null) {
+            const level = await EducationLevel.findById(candidateData.education_level);
+            if (!level) {
+                throw new Error(`Invalid education_level ID: ${candidateData.education_level}.`);
+            }
+        }
+    }
 
     // // Lọc bỏ 'status' khỏi các bản cập nhật trực tiếp
     for (const field of ALLOWED_UPDATE_FIELDS) {
@@ -315,6 +333,18 @@ const Candidate = {
         break;
 
       // Thêm các điều kiện cổng khác cho các trạng thái khác nếu cần.
+      case CANDIDATE_STATUSES.CONTRACT_SIGNED:
+        if (currentStatus !== CANDIDATE_STATUSES.PASSED) {
+          throw new Error(`Candidate must be in ${CANDIDATE_STATUSES.PASSED} status to sign a contract.`);
+        }
+        // Thêm logic tại đây để kiểm tra xem hợp đồng thực sự có tồn tại và đã được 'SIGNED' hay chưa.
+        // Hiện tại, dựa vào contractController để thực hiện cuộc gọi này sau khi hợp đồng được ký kết.
+        // Ví dụ (nếu mẫu Hợp đồng có sẵn ở đây):
+        // const signedContractCount = await Contract.countSignedContractsForCandidate(candidateId);
+        // if (signedContractCount === 0) {
+        //   throw new Error('No signed contract found for this candidate.');
+        // }
+        break;
     }
 
     // Thực hiện cập nhật trạng thái
