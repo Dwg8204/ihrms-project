@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
 import SegmentTabs from '../components/SegmentTabs';
+import { useToast } from '../components/ToastProvider';
 import { recruitmentService } from '../services/recruitmentService';
 import { jobOrderService } from '../services/jobOrderService';
 import { examApplicationService } from '../services/examApplicationService';
@@ -104,7 +105,7 @@ function RecruitmentPage() {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [notice, setNotice] = useState({ type: '', text: '' });
+  const toast = useToast();
 
   const [sources, setSources] = useState([]);
   const [sourceName, setSourceName] = useState('');
@@ -157,11 +158,11 @@ function RecruitmentPage() {
   }, [examApplications]);
 
   const showError = (err) => {
-    setNotice({ type: 'error', text: getErrorMessage(err) });
+    toast.error(getErrorMessage(err));
   };
 
   const showSuccess = (text) => {
-    setNotice({ type: 'ok', text });
+    toast.success(text);
   };
 
   const toPayload = (form) => {
@@ -234,7 +235,6 @@ function RecruitmentPage() {
 
   const reloadAll = async () => {
     setLoading(true);
-    setNotice({ type: '', text: '' });
     try {
       await Promise.all([
         loadSources(),
@@ -406,10 +406,7 @@ function RecruitmentPage() {
     try {
       if (canUseExamCreation(targetStatus)) {
         if (!draft.jobOrderId || !draft.examDate) {
-          setNotice({
-            type: 'error',
-            text: 'Cần chọn đơn hàng và ngày thi trước khi ghép form.'
-          });
+          toast.error('Cần chọn đơn hàng và ngày thi trước khi ghép form.');
           return;
         }
 
@@ -421,10 +418,7 @@ function RecruitmentPage() {
         });
       } else if (canUseExamResult(targetStatus)) {
         if (!draft.examApplicationId) {
-          setNotice({
-            type: 'error',
-            text: 'Cần chọn phiếu thi đang chờ kết quả.'
-          });
+          toast.error('Cần chọn phiếu thi đang chờ kết quả.');
           return;
         }
 
@@ -598,10 +592,6 @@ function RecruitmentPage() {
             </button>
           }
         />
-
-        {notice.text ? (
-          <p className={notice.type === 'error' ? 'error-text' : 'success-text'}>{notice.text}</p>
-        ) : null}
         {loading ? <p className="muted">Đang tải dữ liệu...</p> : null}
 
         <SegmentTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />

@@ -1,5 +1,6 @@
 const Candidate = require('../models/candidateModel');
 const DocumentModel = require('../models/documentModel');
+const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
 
 function createHttpError(message, statusCode) {
   const error = new Error(message);
@@ -15,6 +16,30 @@ function toPositiveInt(value, fallback) {
 
 const VALID_PHASES = new Set(['PRE_EXAM', 'POST_EXAM']);
 const VALID_DOC_STATUSES = new Set(['NOT_SUBMITTED', 'SUBMITTED', 'VERIFIED', 'REJECTED']);
+
+async function tryAutoTransitionAfterDocumentUpdate(candidateId) {
+  const candidate = await Candidate.getById(candidateId);
+  if (!candidate) {
+    return { applied: false, reason: 'candidate-not-found' };
+  }
+
+  if (candidate.status !== CANDIDATE_STATUSES.NEW_RECEIVED) {
+    return { applied: false, reason: 'status-not-eligible' };
+  }
+
+  if (!candidate.is_fee0_paid) {
+    return { applied: false, reason: 'fee0-not-paid' };
+  }
+
+  const readiness = await DocumentModel.getPreExamReadiness(candidateId);
+  if (!readiness.can_submit_profile) {
+    return { applied: false, reason: 'documents-not-submitted', readiness };
+  }
+
+  await Candidate.transitionStatus(candidateId, CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED);
+  const updatedCandidate = await Candidate.getById(candidateId);
+  return { applied: true, reason: 'ok', candidate: updatedCandidate, readiness };
+}
 
 const documentController = {
   getDocumentTypes: async (req, res, next) => {
@@ -143,10 +168,16 @@ const documentController = {
         return next(createHttpError('Document type not found', 404));
       }
 
+      const autoTransition =
+        updated.phase === 'PRE_EXAM'
+          ? await tryAutoTransitionAfterDocumentUpdate(candidateId)
+          : { applied: false, reason: 'phase-not-eligible' };
+
       res.status(200).json({
         success: true,
         message: 'Candidate document updated',
-        data: updated
+        data: updated,
+        auto_transition: autoTransition
       });
     } catch (error) {
       next(error);

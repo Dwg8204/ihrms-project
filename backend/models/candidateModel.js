@@ -268,8 +268,12 @@ const Candidate = {
           throw new Error('Candidate has not paid Fee 0 (is_fee0_paid = 0).');
         }
         const readiness = await DocumentModel.getPreExamReadiness(candidateId);
-        if (!readiness.can_proceed) {
-          throw new Error(`Candidate is missing required PRE_EXAM documents. Missing: ${readiness.missing_documents.map(d => d.name).join(', ')}`);
+        if (!readiness.can_submit_profile) {
+          throw new Error(
+            `Candidate is missing submitted PRE_EXAM documents. Missing: ${
+              readiness.missing_submitted_documents.map((d) => d.name).join(', ') || 'N/A'
+            }`
+          );
         }
         break;
 

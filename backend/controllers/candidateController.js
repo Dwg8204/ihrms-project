@@ -125,14 +125,23 @@ async function validateCitizenIdUnique(citizenId, excludeCandidateId = null) {
   throw createHttpError('citizen_id already exists', 409);
 }
 
-async function validatePreExamGate(candidate) {
+async function validatePreExamGate(candidate, nextStatus) {
   if (!candidate.is_fee0_paid) {
     throw createHttpError('Cannot move status: candidate has not paid fee0', 409);
   }
 
   const readiness = await DocumentModel.getPreExamReadiness(candidate.id);
-  if (!readiness.can_proceed) {
-    const error = createHttpError('Cannot move status: required pre-exam documents are not complete', 409);
+  if (nextStatus === CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED) {
+    if (!readiness.can_submit_profile) {
+      const error = createHttpError('Cannot move status: required pre-exam documents are not submitted', 409);
+      error.details = readiness;
+      throw error;
+    }
+    return;
+  }
+
+  if (!readiness.can_proceed_verified) {
+    const error = createHttpError('Cannot move status: required pre-exam documents are not verified', 409);
     error.details = readiness;
     throw error;
   }
@@ -347,7 +356,7 @@ const candidateController = {
       ]);
 
       if (gateRequiredStatuses.has(nextStatus)) {
-        await validatePreExamGate(candidate);
+        await validatePreExamGate(candidate, nextStatus);
       }
 
       // await Candidate.updateStatus(id, nextStatus);

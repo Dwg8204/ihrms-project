@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import SectionHeader from "../components/SectionHeader";
 import SegmentTabs from "../components/SegmentTabs";
+import { useToast } from "../components/ToastProvider";
 import { documentService } from "../services/documentService";
 import { recruitmentService } from "../services/recruitmentService";
 import { DOC_STATUSES, DOC_STATUS_LABELS } from "../utils/constants";
@@ -67,7 +68,7 @@ function includesKeyword(value, keyword) {
 function DocumentsPage() {
   const [activeTab, setActiveTab] = useState("setup");
   const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState({ type: "", text: "" });
+  const toast = useToast();
 
   const [candidateId, setCandidateId] = useState("");
   const [phase, setPhase] = useState("PRE_EXAM");
@@ -202,11 +203,11 @@ function DocumentsPage() {
   }, [documentTypes]);
 
   const showError = (err) => {
-    setNotice({ type: "error", text: getErrorMessage(err) });
+    toast.error(getErrorMessage(err));
   };
 
   const showSuccess = (text) => {
-    setNotice({ type: "ok", text });
+    toast.success(text);
   };
 
   const loadCandidates = async () => {
@@ -255,7 +256,6 @@ function DocumentsPage() {
 
   const reloadCurrent = async () => {
     setLoading(true);
-    setNotice({ type: "", text: "" });
     try {
       await Promise.all([loadCandidates(), loadDocumentTypes(), loadAlerts()]);
       await loadCandidateDocs();
@@ -294,7 +294,7 @@ function DocumentsPage() {
 
   const handleInitDocs = async () => {
     if (!candidateId) {
-      setNotice({ type: "error", text: "Cần chọn ứng viên trước khi khởi tạo checklist." });
+      toast.error("Cần chọn ứng viên trước khi khởi tạo checklist.");
       return;
     }
     try {
@@ -310,18 +310,15 @@ function DocumentsPage() {
   const handleUpdateDocument = async (event) => {
     event.preventDefault();
     if (!candidateId) {
-      setNotice({ type: "error", text: "Cần chọn ứng viên." });
+      toast.error("Cần chọn ứng viên.");
       return;
     }
     if (!docForm.documentTypeCode) {
-      setNotice({ type: "error", text: "Cần chọn loại giấy tờ." });
+      toast.error("Cần chọn loại giấy tờ.");
       return;
     }
     if (isEvidenceFileRequired && !docForm.file) {
-      setNotice({
-        type: "error",
-        text: "Bắt buộc tải file minh chứng khi cập nhật trạng thái Đã nộp hoặc Đã xác minh.",
-      });
+      toast.error("Bắt buộc tải file minh chứng khi cập nhật trạng thái Đã nộp hoặc Đã xác minh.");
       return;
     }
 
@@ -345,6 +342,9 @@ function DocumentsPage() {
       await loadCandidateDocs();
       await loadPreExamReadiness();
       showSuccess(`Đã cập nhật giấy tờ ${getDocumentLabel(res.data || selectedDocumentType || {})}.`);
+      if (res.auto_transition?.applied) {
+        toast.success("Ứng viên đã tự động chuyển sang trạng thái Đã nộp hồ sơ.");
+      }
     } catch (err) {
       showError(err);
     }
@@ -378,10 +378,6 @@ function DocumentsPage() {
             </button>
           }
         />
-
-        {notice.text ? (
-          <p className={notice.type === "error" ? "error-text" : "success-text"}>{notice.text}</p>
-        ) : null}
         {loading ? <p className="muted">Đang tải dữ liệu M6...</p> : null}
 
         <div className="m6-toolbar">

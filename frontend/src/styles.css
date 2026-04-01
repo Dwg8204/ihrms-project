@@ -1398,6 +1398,76 @@ label {
   margin: 8px 0;
 }
 
+.app-toast-viewport {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1200;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.app-toast {
+  border-radius: 12px;
+  border: 1px solid rgba(17, 35, 33, 0.12);
+  background: #ffffff;
+  box-shadow: 0 16px 28px rgba(29, 41, 77, 0.18);
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  animation: riseIn 0.2s ease both;
+}
+
+.app-toast--success {
+  border-left: 5px solid #1f8b5d;
+}
+
+.app-toast--error {
+  border-left: 5px solid #c63939;
+}
+
+.app-toast--warning {
+  border-left: 5px solid #b06f1f;
+}
+
+.app-toast--info {
+  border-left: 5px solid #4a64d9;
+}
+
+.app-toast__content {
+  min-width: 0;
+}
+
+.app-toast__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-700);
+}
+
+.app-toast__message {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-900);
+  word-break: break-word;
+}
+
+.app-toast__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-500);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-toast__close:hover {
+  color: var(--ink-900);
+}
+
 .tiny {
   font-size: 11px;
 }
@@ -1515,5 +1585,11 @@ label {
 
   .bar-label {
     white-space: normal;
+  }
+
+  .app-toast-viewport {
+    right: 10px;
+    left: 10px;
+    width: auto;
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
 import SegmentTabs from '../components/SegmentTabs';
+import { useToast } from '../components/ToastProvider';
 import { partnerService } from '../services/partnerService';
 import { jobOrderService } from '../services/jobOrderService';
 import {
@@ -82,7 +83,7 @@ function buildRequirements(form) {
 function PartnersJobsPage() {
   const [activeTab, setActiveTab] = useState('partners');
   const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState({ type: '', text: '' });
+  const toast = useToast();
 
   const [partners, setPartners] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -109,11 +110,11 @@ function PartnersJobsPage() {
   );
 
   const showError = (err) => {
-    setNotice({ type: 'error', text: getErrorMessage(err) });
+    toast.error(getErrorMessage(err));
   };
 
   const showSuccess = (text) => {
-    setNotice({ type: 'ok', text });
+    toast.success(text);
   };
 
   const loadPartners = async () => {
@@ -137,7 +138,6 @@ function PartnersJobsPage() {
 
   const reloadAll = async () => {
     setLoading(true);
-    setNotice({ type: '', text: '' });
     try {
       await Promise.all([loadPartners(), loadJobOrders()]);
       if (selectedPartnerId) {
@@ -189,7 +189,7 @@ function PartnersJobsPage() {
     event.preventDefault();
 
     if (!selectedPartnerId) {
-      setNotice({ type: 'error', text: 'Vui lòng chọn đối tác.' });
+      toast.error('Vui lòng chọn đối tác.');
       return;
     }
 
@@ -210,7 +210,7 @@ function PartnersJobsPage() {
     event.preventDefault();
 
     if (!jobForm.partner_id) {
-      setNotice({ type: 'error', text: 'Cần chọn đối tác.' });
+      toast.error('Cần chọn đối tác.');
       return;
     }
 
@@ -244,7 +244,7 @@ function PartnersJobsPage() {
 
   const runMatching = async () => {
     if (!selectedJobOrderId) {
-      setNotice({ type: 'error', text: 'Vui lòng chọn đơn hàng.' });
+      toast.error('Vui lòng chọn đơn hàng.');
       return;
     }
 
@@ -272,12 +272,6 @@ function PartnersJobsPage() {
             </button>
           }
         />
-
-        {notice.text ? (
-          <p className={notice.type === 'error' ? 'error-text' : 'success-text'}>
-            {notice.text}
-          </p>
-        ) : null}
         {loading ? <p className="muted">Đang tải dữ liệu...</p> : null}
 
         <SegmentTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
