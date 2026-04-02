@@ -9,6 +9,22 @@ const EXAM_RESULT_STATUSES = Object.freeze({
 });
 
 class ExamApplication {
+    static buildSessionKey(timestamp, jobOrderId) {
+        return `${timestamp}_${jobOrderId}`;
+    }
+
+    static parseSessionKey(sessionKey) {
+        const [timestampRaw, jobOrderRaw] = String(sessionKey || '').split('_');
+        const timestamp = Number.parseInt(timestampRaw, 10);
+        const jobOrderId = Number.parseInt(jobOrderRaw, 10);
+
+        if (!Number.isInteger(timestamp) || timestamp <= 0 || !Number.isInteger(jobOrderId) || jobOrderId <= 0) {
+            throw new Error('sessionKey must follow format <timestamp>_<jobOrderId>.');
+        }
+
+        return { timestamp, jobOrderId };
+    }
+
     static async create(examAppData) {
         const { candidate_id, job_order_id, exam_date, note } = examAppData;
         try {
@@ -114,6 +130,114 @@ class ExamApplication {
         };
     }
 
+    static async findSessions({ view = 'all', search = '' }) {
+        const where = ['ea.exam_date IS NOT NULL'];
+        const params = [];
+
+        if (search) {
+            where.push('(jo.job_title LIKE ? OR p.name LIKE ?)');
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        let havingSql = '';
+        if (view === 'schedule') {
+            havingSql = "HAVING SUM(CASE WHEN ea.result_status = 'Pending' THEN 1 ELSE 0 END) > 0";
+        }
+
+        const [rows] = await db.query(
+            `
+            SELECT
+                CONCAT(UNIX_TIMESTAMP(ea.exam_date), '_', ea.job_order_id) AS session_key,
+                ea.exam_date,
+                ea.job_order_id,
+                jo.job_title,
+                p.name AS partner_name,
+                COUNT(*) AS total_candidates,
+                SUM(CASE WHEN ea.result_status = 'Pending' THEN 1 ELSE 0 END) AS pending_candidates,
+                SUM(CASE WHEN ea.result_status = 'Pass' THEN 1 ELSE 0 END) AS passed_candidates,
+                SUM(CASE WHEN ea.result_status = 'Fail' THEN 1 ELSE 0 END) AS failed_candidates,
+                SUM(CASE WHEN ea.result_status = 'Reserve' THEN 1 ELSE 0 END) AS reserve_candidates
+            FROM exam_applications ea
+            JOIN job_orders jo ON ea.job_order_id = jo.id
+            LEFT JOIN partners p ON jo.partner_id = p.id
+            WHERE ${where.join(' AND ')}
+            GROUP BY ea.exam_date, ea.job_order_id, jo.job_title, p.name
+            ${havingSql}
+            ORDER BY ea.exam_date DESC, ea.job_order_id ASC
+            `,
+            params
+        );
+
+        return rows;
+    }
+
+    static async findSessionDetail(sessionKey) {
+        const { timestamp, jobOrderId } = this.parseSessionKey(sessionKey);
+
+        const [rows] = await db.query(
+            `
+            SELECT
+                CONCAT(UNIX_TIMESTAMP(ea.exam_date), '_', ea.job_order_id) AS session_key,
+                ea.exam_date,
+                ea.id,
+                ea.candidate_id,
+                ea.job_order_id,
+                ea.result_status,
+                ea.note,
+                ea.score_details,
+                c.full_name AS candidate_name,
+                c.citizen_id AS candidate_citizen_id,
+                c.phone AS candidate_phone,
+                c.email AS candidate_email,
+                c.status AS candidate_status,
+                jo.job_title,
+                jo.partner_id,
+                p.name AS partner_name
+            FROM exam_applications ea
+            JOIN candidates c ON ea.candidate_id = c.id
+            JOIN job_orders jo ON ea.job_order_id = jo.id
+            LEFT JOIN partners p ON jo.partner_id = p.id
+            WHERE UNIX_TIMESTAMP(ea.exam_date) = ? AND ea.job_order_id = ?
+            ORDER BY c.full_name ASC, ea.id ASC
+            `,
+            [timestamp, jobOrderId]
+        );
+
+        if (!rows.length) {
+            return null;
+        }
+
+        return {
+            session_key: rows[0].session_key,
+            exam_date: rows[0].exam_date,
+            job_order_id: rows[0].job_order_id,
+            job_title: rows[0].job_title,
+            partner_name: rows[0].partner_name,
+            total_candidates: rows.length,
+            pending_candidates: rows.filter((row) => row.result_status === 'Pending').length,
+            passed_candidates: rows.filter((row) => row.result_status === 'Pass').length,
+            failed_candidates: rows.filter((row) => row.result_status === 'Fail').length,
+            reserve_candidates: rows.filter((row) => row.result_status === 'Reserve').length,
+            candidates: rows.map((row) => ({
+                id: row.id,
+                candidate_id: row.candidate_id,
+                candidate_name: row.candidate_name,
+                candidate_citizen_id: row.candidate_citizen_id,
+                candidate_phone: row.candidate_phone,
+                candidate_email: row.candidate_email,
+                candidate_status: row.candidate_status,
+                job_order_id: row.job_order_id,
+                job_title: row.job_title,
+                partner_id: row.partner_id,
+                partner_name: row.partner_name,
+                result_status: row.result_status,
+                note: row.note,
+                score_details: row.score_details ? JSON.parse(row.score_details) : null,
+                exam_date: row.exam_date
+            }))
+        };
+    }
+
     static async findById(id) {
         const [rows] = await db.query(
             `
@@ -171,6 +295,183 @@ class ExamApplication {
             [result_status, scoreDetailsJson, note, id]
         );
         return result.affectedRows > 0;
+    }
+
+    static async findPendingCandidatesByJobOrder(jobOrderId) {
+        const parsedJobOrderId = Number.parseInt(jobOrderId, 10);
+        if (!Number.isInteger(parsedJobOrderId) || parsedJobOrderId <= 0) {
+            throw new Error('job_order_id must be a positive integer.');
+        }
+
+        const [jobOrderRows] = await db.query(
+            'SELECT id, job_title FROM job_orders WHERE id = ? LIMIT 1',
+            [parsedJobOrderId]
+        );
+        if (!jobOrderRows.length) {
+            throw new Error('Job Order not found.');
+        }
+
+        const [rows] = await db.query(
+            `
+            SELECT
+                ea.id,
+                ea.exam_date,
+                ea.result_status,
+                ea.candidate_id,
+                c.citizen_id AS candidate_citizen_id,
+                c.full_name AS candidate_name,
+                c.phone AS candidate_phone,
+                c.email AS candidate_email,
+                c.status AS candidate_status
+            FROM exam_applications ea
+            JOIN candidates c ON c.id = ea.candidate_id
+            WHERE ea.job_order_id = ? AND ea.result_status = 'Pending'
+            ORDER BY c.full_name ASC
+            `,
+            [parsedJobOrderId]
+        );
+
+        return {
+            job_order_id: parsedJobOrderId,
+            job_title: jobOrderRows[0].job_title,
+            candidates: rows
+        };
+    }
+
+    static async updateSchedule(id, scheduleData) {
+        const { exam_date } = scheduleData;
+
+        const currentExamApp = await this.findById(id);
+        if (!currentExamApp) {
+            throw new Error('Exam application not found.');
+        }
+
+        if (currentExamApp.result_status !== EXAM_RESULT_STATUSES.PENDING) {
+            throw new Error('Cannot update exam schedule when result is already recorded.');
+        }
+
+        if (!exam_date) {
+            throw new Error('exam_date is required.');
+        }
+
+        const examDate = new Date(exam_date);
+        if (Number.isNaN(examDate.getTime())) {
+            throw new Error('exam_date is invalid.');
+        }
+
+        const [result] = await db.query(
+            'UPDATE exam_applications SET exam_date = ? WHERE id = ?',
+            [exam_date, id]
+        );
+
+        return result.affectedRows > 0;
+    }
+
+    static async updateSessionSchedule(sessionKey, exam_date) {
+        const { timestamp, jobOrderId } = this.parseSessionKey(sessionKey);
+
+        if (!exam_date) {
+            throw new Error('exam_date is required.');
+        }
+
+        const parsedDate = new Date(exam_date);
+        if (Number.isNaN(parsedDate.getTime())) {
+            throw new Error('exam_date is invalid.');
+        }
+
+        const [statsRows] = await db.query(
+            `
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN result_status = 'Pending' THEN 1 ELSE 0 END) AS pending_total
+            FROM exam_applications
+            WHERE UNIX_TIMESTAMP(exam_date) = ? AND job_order_id = ?
+            `,
+            [timestamp, jobOrderId]
+        );
+
+        const stats = statsRows[0] || { total: 0, pending_total: 0 };
+        const total = Number(stats.total || 0);
+        const pendingTotal = Number(stats.pending_total || 0);
+
+        if (total === 0) {
+            throw new Error('Exam session not found.');
+        }
+
+        if (pendingTotal !== total) {
+            throw new Error('Cannot update exam session because some candidates already have exam results.');
+        }
+
+        const [result] = await db.query(
+            'UPDATE exam_applications SET exam_date = ? WHERE UNIX_TIMESTAMP(exam_date) = ? AND job_order_id = ?',
+            [exam_date, timestamp, jobOrderId]
+        );
+
+        const newTimestamp = Math.floor(parsedDate.getTime() / 1000);
+        return {
+            affectedRows: result.affectedRows,
+            sessionKey: this.buildSessionKey(newTimestamp, jobOrderId)
+        };
+    }
+
+    static async bulkScheduleSession({ job_order_id, exam_application_ids, exam_date }) {
+        const parsedJobOrderId = Number.parseInt(job_order_id, 10);
+        if (!Number.isInteger(parsedJobOrderId) || parsedJobOrderId <= 0) {
+            throw new Error('job_order_id must be a positive integer.');
+        }
+
+        const appIds = Array.isArray(exam_application_ids)
+            ? [...new Set(exam_application_ids.map((id) => Number.parseInt(id, 10)).filter((id) => Number.isInteger(id) && id > 0))]
+            : [];
+        if (!appIds.length) {
+            throw new Error('exam_application_ids must be a non-empty array of positive integers.');
+        }
+
+        if (!exam_date) {
+            throw new Error('exam_date is required.');
+        }
+
+        const parsedDate = new Date(exam_date);
+        if (Number.isNaN(parsedDate.getTime())) {
+            throw new Error('exam_date is invalid.');
+        }
+
+        const placeholders = appIds.map(() => '?').join(',');
+        const [rows] = await db.query(
+            `
+            SELECT id, result_status, job_order_id
+            FROM exam_applications
+            WHERE id IN (${placeholders})
+            `,
+            appIds
+        );
+
+        if (rows.length !== appIds.length) {
+            throw new Error('Some exam applications were not found.');
+        }
+
+        if (rows.some((row) => Number(row.job_order_id) !== parsedJobOrderId)) {
+            throw new Error('All exam applications must belong to the same job order.');
+        }
+
+        if (rows.some((row) => row.result_status !== 'Pending')) {
+            throw new Error('Only pending exam applications can be scheduled in bulk.');
+        }
+
+        const [result] = await db.query(
+            `
+            UPDATE exam_applications
+            SET exam_date = ?
+            WHERE job_order_id = ? AND id IN (${placeholders})
+            `,
+            [exam_date, parsedJobOrderId, ...appIds]
+        );
+
+        const sessionTimestamp = Math.floor(parsedDate.getTime() / 1000);
+        return {
+            affectedRows: result.affectedRows,
+            sessionKey: this.buildSessionKey(sessionTimestamp, parsedJobOrderId)
+        };
     }
 
     // Phương pháp này xử lý việc "hoàn tác" một ứng dụng thi, ví dụ, nếu kết quả được nhập sai

@@ -4,7 +4,13 @@ const examAppController = require('../controllers/examApplicationController');
 
 router.post('/', examAppController.createExamApplication);
 router.get('/', examAppController.getExamApplications);
+router.post('/sessions/bulk-schedule', examAppController.bulkScheduleSession);
+router.get('/sessions', examAppController.getExamSessions);
+router.get('/sessions/:sessionKey', examAppController.getExamSessionDetail);
+router.patch('/sessions/:sessionKey', examAppController.updateExamSession);
+router.get('/job-orders/:jobOrderId/pending-candidates', examAppController.getPendingCandidatesByJobOrder);
 router.get('/:id', examAppController.getExamApplicationById);
+router.patch('/:id/schedule', examAppController.updateExamSchedule);
 router.patch('/:id/result', examAppController.updateExamResult); // Lộ trình cụ thể để cập nhật kết quả
 router.delete('/:id', examAppController.deleteExamApplication);
 

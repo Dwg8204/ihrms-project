@@ -48,6 +48,50 @@ exports.getExamApplications = async (req, res, next) => {
     }
 };
 
+exports.getExamSessions = async (req, res, next) => {
+    try {
+        const { view = 'all', search = '' } = req.query;
+        if (!['all', 'schedule', 'result'].includes(view)) {
+            return res.status(400).json({ success: false, message: 'view must be one of: all, schedule, result.' });
+        }
+
+        const sessions = await ExamApplication.findSessions({ view, search: String(search || '').trim() });
+        res.status(200).json({ success: true, data: sessions });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.getExamSessionDetail = async (req, res, next) => {
+    try {
+        const { sessionKey } = req.params;
+        const detail = await ExamApplication.findSessionDetail(sessionKey);
+        if (!detail) {
+            return res.status(404).json({ success: false, message: 'Exam session not found.' });
+        }
+
+        res.status(200).json({ success: true, data: detail });
+    } catch (error) {
+        if (error.message.includes('sessionKey')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
+exports.getPendingCandidatesByJobOrder = async (req, res, next) => {
+    try {
+        const { jobOrderId } = req.params;
+        const data = await ExamApplication.findPendingCandidatesByJobOrder(jobOrderId);
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        if (error.message.includes('job_order_id') || error.message.includes('Job Order not found')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
 exports.getExamApplicationById = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -104,6 +148,94 @@ exports.updateExamResult = async (req, res, next) => {
     }
 };
 
+exports.updateExamSchedule = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { exam_date } = req.body;
+
+        if (!exam_date) {
+            return res.status(400).json({ success: false, message: 'exam_date is required.' });
+        }
+
+        const updated = await ExamApplication.updateSchedule(id, { exam_date });
+        if (!updated) {
+            return res.status(500).json({ success: false, message: 'Failed to update exam schedule.' });
+        }
+
+        const refreshed = await ExamApplication.findById(id);
+        res.status(200).json({ success: true, data: refreshed, message: 'Exam schedule updated successfully.' });
+    } catch (error) {
+        if (error.message.includes('Exam application not found') || error.message.includes('exam_date')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        if (error.message.includes('Cannot update exam schedule when result is already recorded')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
+exports.updateExamSession = async (req, res, next) => {
+    try {
+        const { sessionKey } = req.params;
+        const { exam_date } = req.body;
+
+        if (!exam_date) {
+            return res.status(400).json({ success: false, message: 'exam_date is required.' });
+        }
+
+        const updated = await ExamApplication.updateSessionSchedule(sessionKey, exam_date);
+        const refreshed = await ExamApplication.findSessionDetail(updated.sessionKey);
+
+        res.status(200).json({ success: true, data: refreshed, message: 'Exam session updated successfully.' });
+    } catch (error) {
+        if (
+            error.message.includes('sessionKey') ||
+            error.message.includes('exam_date') ||
+            error.message.includes('Exam session not found')
+        ) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+
+        if (error.message.includes('Cannot update exam session because some candidates already have exam results')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
+
+        next(error);
+    }
+};
+
+exports.bulkScheduleSession = async (req, res, next) => {
+    try {
+        const { job_order_id, exam_application_ids, exam_date } = req.body;
+
+        const result = await ExamApplication.bulkScheduleSession({
+            job_order_id,
+            exam_application_ids,
+            exam_date
+        });
+
+        const refreshed = await ExamApplication.findSessionDetail(result.sessionKey);
+        res.status(200).json({
+            success: true,
+            data: refreshed,
+            message: 'Exam session created/updated successfully for selected candidates.'
+        });
+    } catch (error) {
+        if (
+            error.message.includes('job_order_id') ||
+            error.message.includes('exam_application_ids') ||
+            error.message.includes('exam_date') ||
+            error.message.includes('not found') ||
+            error.message.includes('same job order') ||
+            error.message.includes('pending exam applications')
+        ) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        next(error);
+    }
+};
+
 exports.deleteExamApplication = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -121,8 +253,28 @@ exports.deleteExamApplication = async (req, res, next) => {
         if (!deleted) {
             return res.status(500).json({ success: false, message: 'Failed to delete exam application.' });
         }
+
+        const candidate = await Candidate.getById(examApp.candidate_id);
+        if (candidate && candidate.status === CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM) {
+            const pendingApps = await ExamApplication.findAll({
+                page: 1,
+                limit: 1,
+                candidate_id: examApp.candidate_id,
+                result_status: 'Pending'
+            });
+
+            if (Number(pendingApps?.pagination?.total || 0) === 0) {
+                await Candidate.transitionStatus(examApp.candidate_id, CANDIDATE_STATUSES.WAITING_FORM_MATCH, {
+                    jobOrderId: examApp.job_order_id
+                });
+            }
+        }
+
         res.status(200).json({ success: true, message: 'Exam application deleted successfully.' });
     } catch (error) {
+        if (error.message.includes('Invalid status transition') || error.message.includes('Candidate must be in')) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
         next(error);
     }
 };

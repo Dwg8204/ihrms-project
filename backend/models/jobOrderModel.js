@@ -1,7 +1,37 @@
 const db = require('../config/db');
 const { JOB_ORDER_STATUSES } = require('../utils/jobOrderStatus');
 const DocumentModel = require('./documentModel');
-const EducationLevel = require('./educationLevelModel');
+
+function toValidPositiveInt(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeEducationRequirement(requirements) {
+  const rawLevels = Array.isArray(requirements.education_level)
+    ? requirements.education_level
+    : [];
+
+  const requiredEducationIds = new Set();
+  const requiredEducationNames = new Set();
+
+  rawLevels.forEach((item) => {
+    const asId = toValidPositiveInt(item);
+    if (asId) {
+      requiredEducationIds.add(asId);
+      return;
+    }
+
+    if (typeof item === 'string' && item.trim()) {
+      requiredEducationNames.add(item.trim().toLowerCase());
+    }
+  });
+
+  return {
+    requiredEducationIds,
+    requiredEducationNames
+  };
+}
 
 class JobOrder {
   static async create(jobOrderData) {
@@ -44,7 +74,19 @@ class JobOrder {
 
   static async findAll(page = 1, limit = 20, search = '', partner_id = null, status = '') {
     const offset = (page - 1) * limit;
-    let query = 'SELECT jo.*, p.name AS partner_name FROM job_orders jo JOIN partners p ON jo.partner_id = p.id WHERE 1=1';
+    let query = `
+      SELECT
+        jo.*,
+        p.name AS partner_name,
+        (
+          SELECT COUNT(*)
+          FROM exam_applications ea
+          WHERE ea.job_order_id = jo.id
+        ) AS matched_candidates_count
+      FROM job_orders jo
+      JOIN partners p ON jo.partner_id = p.id
+      WHERE 1=1
+    `;
     let countQuery = 'SELECT COUNT(jo.id) AS total FROM job_orders jo JOIN partners p ON jo.partner_id = p.id WHERE 1=1';
     const params = [];
     const countParams = [];
@@ -79,7 +121,13 @@ class JobOrder {
       return {
         data: jobOrders.map(jo => ({
           ...jo,
-          requirements: JSON.parse(jo.requirements) // Parse requirements back to object
+          requirements: (() => {
+            try {
+              return JSON.parse(jo.requirements);
+            } catch (error) {
+              return {};
+            }
+          })()
         })),
         pagination: {
           page,
@@ -95,14 +143,118 @@ class JobOrder {
 
   static async findById(id) {
     try {
-      const [rows] = await db.query('SELECT jo.*, p.name AS partner_name FROM job_orders jo JOIN partners p ON jo.partner_id = p.id WHERE jo.id = ?', [id]);
+      const [rows] = await db.query(
+        `
+        SELECT
+          jo.*,
+          p.name AS partner_name,
+          (
+            SELECT COUNT(*)
+            FROM exam_applications ea
+            WHERE ea.job_order_id = jo.id
+          ) AS matched_candidates_count
+        FROM job_orders jo
+        JOIN partners p ON jo.partner_id = p.id
+        WHERE jo.id = ?
+        `,
+        [id]
+      );
       if (rows[0]) {
-        rows[0].requirements = JSON.parse(rows[0].requirements); // Parse requirements
+        try {
+          rows[0].requirements = JSON.parse(rows[0].requirements);
+        } catch (error) {
+          rows[0].requirements = {};
+        }
       }
       return rows[0];
     } catch (error) {
       throw error;
     }
+  }
+
+  static async getJobOrderCandidates(jobOrderId, search = '') {
+    const jobOrder = await this.findById(jobOrderId);
+    if (!jobOrder) {
+      throw new Error('Job Order not found.');
+    }
+
+    let query = `
+      SELECT
+        ea.id AS exam_application_id,
+        ea.job_order_id,
+        ea.candidate_id,
+        ea.exam_date,
+        ea.result_status,
+        ea.note,
+        c.citizen_id,
+        c.full_name,
+        c.phone,
+        c.email,
+        c.status AS candidate_status,
+        c.education_level,
+        el.name AS education_level_name,
+        c.created_at AS candidate_created_at
+      FROM exam_applications ea
+      JOIN candidates c ON c.id = ea.candidate_id
+      LEFT JOIN education_levels el ON el.id = c.education_level
+      WHERE ea.job_order_id = ?
+    `;
+    const params = [jobOrderId];
+
+    if (search) {
+      query += ' AND (c.citizen_id LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ' ORDER BY ea.created_at DESC, ea.id DESC';
+
+    const [rows] = await db.query(query, params);
+    return rows;
+  }
+
+  static async removeCandidateFromJobOrder(jobOrderId, candidateId) {
+    const jobOrder = await this.findById(jobOrderId);
+    if (!jobOrder) {
+      throw new Error('Job Order not found.');
+    }
+
+    const [apps] = await db.query(
+      `
+      SELECT id, result_status
+      FROM exam_applications
+      WHERE job_order_id = ? AND candidate_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+      `,
+      [jobOrderId, candidateId]
+    );
+
+    if (!apps.length) {
+      throw new Error('Candidate is not linked to this job order.');
+    }
+
+    const app = apps[0];
+    if (app.result_status !== 'Pending') {
+      throw new Error('Cannot remove candidate from job order when exam result is already recorded.');
+    }
+
+    await db.query('DELETE FROM exam_applications WHERE id = ?', [app.id]);
+
+    const CandidateModel = require('./candidateModel');
+    const candidate = await CandidateModel.getById(candidateId);
+
+    if (candidate && candidate.status === 'FORM_MATCHED_WAITING_EXAM') {
+      const [remainingPendingApps] = await db.query(
+        'SELECT COUNT(*) AS total FROM exam_applications WHERE candidate_id = ? AND result_status = ?',
+        [candidateId, 'Pending']
+      );
+
+      if (Number(remainingPendingApps[0]?.total || 0) === 0) {
+        await CandidateModel.transitionStatus(candidateId, 'WAITING_FORM_MATCH');
+      }
+    }
+
+    return { exam_application_id: app.id };
   }
 
   static async update(id, jobOrderData) {
@@ -205,61 +357,64 @@ class JobOrder {
         }
 
         const requirements = jobOrder.requirements || {};
+        const { requiredEducationIds, requiredEducationNames } = normalizeEducationRequirement(requirements);
         let candidateQuery = `
             SELECT
                 c.*,
-                el.name AS education_level_name, -- Join to get education level name
-                GROUP_CONCAT(dt.code ORDER BY dt.display_order ASC) AS verified_doc_codes,
-                GROUP_CONCAT(dt.name ORDER BY dt.display_order ASC) AS verified_doc_names
+            el.name AS education_level_name,
+            GROUP_CONCAT(
+              DISTINCT CASE
+              WHEN dt.phase = 'PRE_EXAM'
+               AND dt.is_required_for_gate = 1
+               AND cd.status IN ('SUBMITTED', 'VERIFIED')
+              THEN dt.code
+              END
+              ORDER BY dt.display_order ASC
+            ) AS submitted_doc_codes,
+            GROUP_CONCAT(
+              DISTINCT CASE
+              WHEN dt.phase = 'PRE_EXAM'
+               AND dt.is_required_for_gate = 1
+               AND cd.status IN ('SUBMITTED', 'VERIFIED')
+              THEN dt.name
+              END
+              ORDER BY dt.display_order ASC
+            ) AS submitted_doc_names
             FROM candidates c
-            LEFT JOIN education_levels el ON c.education_level = el.id -- Join education_levels
+          LEFT JOIN education_levels el ON c.education_level = el.id
             LEFT JOIN candidate_documents cd ON c.id = cd.candidate_id
             LEFT JOIN document_types dt ON cd.document_type_id = dt.id
-            WHERE c.status = ?
-            AND c.is_fee0_paid = 1
-            AND cd.status = 'VERIFIED'
-            AND dt.phase = 'PRE_EXAM'
-            AND dt.is_required_for_gate = 1
-        `;
-      let countQuery = `
-            SELECT COUNT(DISTINCT c.id) AS total_candidates
-            FROM candidates c
-            LEFT JOIN education_levels el ON c.education_level = el.id
-            LEFT JOIN candidate_documents cd ON c.id = cd.candidate_id
-            LEFT JOIN document_types dt ON cd.document_type_id = dt.id
-            WHERE c.status = ?
-            AND c.is_fee0_paid = 1
-            AND cd.status = 'VERIFIED'
-            AND dt.phase = 'PRE_EXAM'
-            AND dt.is_required_for_gate = 1
+            WHERE c.status IN (?, ?)
         `;
         
-        const params = ['WAITING_FORM_MATCH']; // Chỉ ghép cặp các ứng viên đang chờ đơn.
-        const countParams = ['WAITING_FORM_MATCH'];
+        const params = ['PAID0_DOCS_SUBMITTED', 'WAITING_FORM_MATCH'];
 
         if (search) {
-            candidateQuery += ' AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
-            countQuery += ' AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
-            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-            countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+          candidateQuery += ' AND (c.citizen_id LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
 
         candidateQuery += `
             GROUP BY c.id
-            HAVING COUNT(DISTINCT dt.id) = (SELECT COUNT(id) FROM document_types WHERE phase = 'PRE_EXAM' AND is_required_for_gate = 1)
+          HAVING COUNT(
+            DISTINCT CASE
+            WHEN dt.phase = 'PRE_EXAM'
+             AND dt.is_required_for_gate = 1
+             AND cd.status IN ('SUBMITTED', 'VERIFIED')
+            THEN dt.id
+            END
+          ) = (SELECT COUNT(id) FROM document_types WHERE phase = 'PRE_EXAM' AND is_required_for_gate = 1)
             ORDER BY c.created_at DESC
-            LIMIT ? OFFSET ?
         `;
-        params.push(limit, offset);
 
         const [eligibleCandidates] = await db.query(candidateQuery, params);
-        const [totalResult] = await db.query(countQuery, countParams);
-        const total = totalResult[0].total_candidates;
 
-        // Hiện tại việc lọc các yêu cầu JSON được thực hiện trong bộ nhớ (sử dụng câu lệnh SQL phức tạp để lọc JSON).
         const matchedCandidates = eligibleCandidates.filter(candidate => {
-            // Yêu cầu về độ tuổi
-            if (requirements.age && candidate.dob) {
+          if (requirements.age) {
+            if (!candidate.dob) {
+              return false;
+            }
+
                 const birthDate = new Date(candidate.dob);
                 const today = new Date();
                 let age = today.getFullYear() - birthDate.getFullYear();
@@ -267,60 +422,68 @@ class JobOrder {
                 if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
                     age--;
                 }
-                if ((requirements.age.min && age < requirements.age.min) ||
-                    (requirements.age.max && age > requirements.age.max)) {
+
+            const minAge = Number.parseInt(requirements.age.min, 10);
+            const maxAge = Number.parseInt(requirements.age.max, 10);
+            if ((!Number.isNaN(minAge) && age < minAge) ||
+              (!Number.isNaN(maxAge) && age > maxAge)) {
                     return false;
                 }
             }
 
-            // Yêu cầu về giới tính
             if (requirements.gender && requirements.gender !== 'any' && candidate.gender) {
                 if (requirements.gender.toLowerCase() !== candidate.gender.toLowerCase()) {
                     return false;
                 }
             }
 
-            // Yêu cầu về trình độ học vấn
-            if (requirements.education_level && requirements.education_level.length > 0 && candidate.education_level) {
-          // requirements.education_level will be an array of IDs
-              if (!requirements.education_level.includes(candidate.education_level)) {
+          if (requiredEducationIds.size > 0 || requiredEducationNames.size > 0) {
+            const candidateEducationId = toValidPositiveInt(candidate.education_level);
+            const candidateEducationName = String(candidate.education_level_name || '').trim().toLowerCase();
+            const matchedById = candidateEducationId ? requiredEducationIds.has(candidateEducationId) : false;
+            const matchedByName = candidateEducationName
+            ? requiredEducationNames.has(candidateEducationName)
+            : false;
+
+            if (!matchedById && !matchedByName) {
                 return false;
               }
             }
 
-            // Yêu cầu về số năm kinh nghiệm (đơn giản hóa, dựa trên bảng tóm tắt kinh nghiệm)
-            if (requirements.experience_years && requirements.experience_years.min && candidate.experience_summary) {
-                if (requirements.experience_years.min > 0 && (!candidate.experience_summary || candidate.experience_summary.trim() === '')) {
+          if (requirements.experience_years && requirements.experience_years.min) {
+            const minExperience = Number.parseInt(requirements.experience_years.min, 10);
+            if (!Number.isNaN(minExperience) && minExperience > 0 && (!candidate.experience_summary || candidate.experience_summary.trim() === '')) {
                     return false;
                 }
             }
 
-            // Yêu cầu về chiều cao
-            if (requirements.height && requirements.height.min && candidate.height) {
-                if (candidate.height < requirements.height.min) {
+          if (requirements.height && requirements.height.min) {
+            const minHeight = Number.parseFloat(requirements.height.min);
+            if (!Number.isNaN(minHeight) && (candidate.height === null || candidate.height === undefined || Number(candidate.height) < minHeight)) {
                     return false;
                 }
             }
 
-            // Yêu cầu về cân nặng
-            if (requirements.weight && requirements.weight.min && candidate.weight) {
-                if (candidate.weight < requirements.weight.min) {
+          if (requirements.weight && requirements.weight.min) {
+            const minWeight = Number.parseFloat(requirements.weight.min);
+            if (!Number.isNaN(minWeight) && (candidate.weight === null || candidate.weight === undefined || Number(candidate.weight) < minWeight)) {
                     return false;
                 }
             }
-            
-            // Bổ sung các yêu cầu khác nếu cần.
 
             return true;
         });
 
+        const total = matchedCandidates.length;
+        const paginatedCandidates = matchedCandidates.slice(offset, offset + limit);
+
         return {
-            data: matchedCandidates,
+          data: paginatedCandidates,
             pagination: {
                 page,
                 limit,
-                total: total, // tổng số ứng viên đủ điều kiện trước khi lọc JSON
-                filteredTotal: matchedCandidates.length, // tổng sau khi lọc JSON
+            total,
+            filteredTotal: total,
                 totalPages: Math.ceil(total / limit),
             },
         };
@@ -342,23 +505,24 @@ class JobOrder {
           }
 
           const CandidateModel = require('./candidateModel'); // Import here to avoid circular dependency
-          const candidate = await CandidateModel.getById(candidateId);
+            let candidate = await CandidateModel.getById(candidateId);
           if (!candidate) {
               throw new Error('Candidate not found.');
           }
-          if (candidate.status !== 'WAITING_FORM_MATCH') {
-              throw new Error(`Candidate must be in WAITING_FORM_MATCH status for manual matching. Current status: ${candidate.status}`);
+
+            if (candidate.status === 'PAID0_DOCS_SUBMITTED') {
+            await CandidateModel.transitionStatus(candidateId, 'WAITING_FORM_MATCH');
+            candidate = await CandidateModel.getById(candidateId);
+            }
+
+            if (candidate.status !== 'WAITING_FORM_MATCH') {
+              throw new Error(`Candidate must be in WAITING_FORM_MATCH status (or PAID0_DOCS_SUBMITTED) for manual matching. Current status: ${candidate.status}`);
           }
 
-          // Kiểm tra trạng thái đã thanh toán phí 0
-          if (!candidate.is_fee0_paid) {
-            throw new Error('Candidate has not paid Fee 0 (is_fee0_paid = 0), cannot manually match.');
-          }
-
-          // Kiểm tra 7 tài liệu PRE_EXAM
+          // Kiểm tra tài liệu PRE_EXAM ở mức đã nộp (SUBMITTED/VERIFIED)
           const readiness = await DocumentModel.getPreExamReadiness(candidateId);
-          if (!readiness.can_proceed) {
-            throw new Error(`Candidate is missing required PRE_EXAM documents for manual matching. Missing: ${readiness.missing_documents.map(d => d.name).join(', ')}`);
+          if (!readiness.can_submit_profile) {
+            throw new Error(`Candidate is missing required PRE_EXAM documents for manual matching. Missing: ${readiness.missing_submitted_documents.map(d => d.name).join(', ')}`);
           }
 
           // Kiểm tra xem ứng viên đã tham gia kỳ thi cho vị trí tuyển dụng này chưa (để tránh đăng ký trùng lặp).

@@ -6,6 +6,11 @@ export const jobOrderService = {
     return data;
   },
 
+  getJobOrderById: async (id) => {
+    const { data } = await api.get(`/job-orders/${id}`);
+    return data;
+  },
+
   createJobOrder: async (payload) => {
     const { data } = await api.post('/job-orders', payload);
     return data;
@@ -24,6 +29,25 @@ export const jobOrderService = {
   getMatchingCandidates: async (jobOrderId, params = {}) => {
     const { data } = await api.get(`/job-orders/${jobOrderId}/matching-candidates`, {
       params
+    });
+    return data;
+  },
+
+  getJobOrderCandidates: async (jobOrderId, params = {}) => {
+    const { data } = await api.get(`/job-orders/${jobOrderId}/candidates`, {
+      params
+    });
+    return data;
+  },
+
+  removeCandidateFromJobOrder: async (jobOrderId, candidateId) => {
+    const { data } = await api.delete(`/job-orders/${jobOrderId}/candidates/${candidateId}`);
+    return data;
+  },
+
+  manualMatchCandidate: async (jobOrderId, candidateId) => {
+    const { data } = await api.post(`/job-orders/${jobOrderId}/manual-match`, {
+      candidate_id: Number(candidateId)
     });
     return data;
   }

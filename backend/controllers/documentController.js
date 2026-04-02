@@ -27,10 +27,6 @@ async function tryAutoTransitionAfterDocumentUpdate(candidateId) {
     return { applied: false, reason: 'status-not-eligible' };
   }
 
-  if (!candidate.is_fee0_paid) {
-    return { applied: false, reason: 'fee0-not-paid' };
-  }
-
   const readiness = await DocumentModel.getPreExamReadiness(candidateId);
   if (!readiness.can_submit_profile) {
     return { applied: false, reason: 'documents-not-submitted', readiness };

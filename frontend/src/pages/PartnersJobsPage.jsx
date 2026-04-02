@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import DetailModal from '../components/DetailModal';
 import SectionHeader from '../components/SectionHeader';
 import SegmentTabs from '../components/SegmentTabs';
 import { useToast } from '../components/ToastProvider';
 import { partnerService } from '../services/partnerService';
 import { jobOrderService } from '../services/jobOrderService';
+import { recruitmentService } from '../services/recruitmentService';
+import { educationLevelService } from '../services/educationLevelService';
 import {
+  CANDIDATE_STATUSES,
   JOB_ORDER_STATUSES,
   JOB_ORDER_STATUS_LABELS,
   PARTNER_STATUSES,
@@ -43,7 +47,7 @@ const initialJobForm = {
   req_age_min: '',
   req_age_max: '',
   req_gender: 'any',
-  req_education: '',
+  req_education: [],
   req_experience_min: '',
   req_height_min: '',
   req_weight_min: ''
@@ -62,11 +66,10 @@ function buildRequirements(form) {
 
   if (form.req_gender) requirements.gender = form.req_gender;
 
-  const education = form.req_education
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (education.length) requirements.education_level = education;
+  const educationIds = (Array.isArray(form.req_education) ? form.req_education : [])
+    .map((item) => Number.parseInt(item, 10))
+    .filter((item) => Number.isInteger(item) && item > 0);
+  if (educationIds.length) requirements.education_level = educationIds;
 
   const expMin = Number(form.req_experience_min);
   if (!Number.isNaN(expMin)) requirements.experience_years = { min: expMin };
@@ -80,6 +83,80 @@ function buildRequirements(form) {
   return requirements;
 }
 
+function buildJobFormFromOrder(order) {
+  const requirements = safeJsonParse(order?.requirements, {});
+  const educationLevels = Array.isArray(requirements.education_level)
+    ? requirements.education_level.map((item) => String(item))
+    : [];
+
+  const deadlineDate = order?.deadline ? new Date(order.deadline) : null;
+  const deadline = deadlineDate && !Number.isNaN(deadlineDate.getTime())
+    ? deadlineDate.toISOString().split('T')[0]
+    : '';
+
+  return {
+    partner_id: order?.partner_id ? String(order.partner_id) : '',
+    job_title: order?.job_title || '',
+    quantity_needed: order?.quantity_needed !== undefined && order?.quantity_needed !== null
+      ? String(order.quantity_needed)
+      : '',
+    salary_info: order?.salary_info || '',
+    deadline,
+    status: order?.status || 'OPEN',
+    req_age_min: requirements?.age?.min !== undefined ? String(requirements.age.min) : '',
+    req_age_max: requirements?.age?.max !== undefined ? String(requirements.age.max) : '',
+    req_gender: requirements?.gender || 'any',
+    req_education: educationLevels,
+    req_experience_min: requirements?.experience_years?.min !== undefined
+      ? String(requirements.experience_years.min)
+      : '',
+    req_height_min: requirements?.height?.min !== undefined ? String(requirements.height.min) : '',
+    req_weight_min: requirements?.weight?.min !== undefined ? String(requirements.weight.min) : ''
+  };
+}
+
+function formatRequirementText(requirementsRaw, educationNameMap) {
+  const requirements = safeJsonParse(requirementsRaw, {});
+  const lines = [];
+
+  const minAge = requirements?.age?.min;
+  const maxAge = requirements?.age?.max;
+  if (minAge !== undefined || maxAge !== undefined) {
+    const from = minAge !== undefined ? minAge : 'không giới hạn';
+    const to = maxAge !== undefined ? maxAge : 'không giới hạn';
+    lines.push(`Độ tuổi: từ ${from} đến ${to}`);
+  }
+
+  if (requirements?.gender && requirements.gender !== 'any') {
+    lines.push(`Giới tính: ${requirements.gender === 'male' ? 'Nam' : 'Nữ'}`);
+  } else {
+    lines.push('Giới tính: không yêu cầu');
+  }
+
+  if (Array.isArray(requirements?.education_level) && requirements.education_level.length > 0) {
+    const educationText = requirements.education_level
+      .map((id) => educationNameMap[String(id)] || `Mức #${id}`)
+      .join(', ');
+    lines.push(`Học vấn: ${educationText}`);
+  } else {
+    lines.push('Học vấn: không yêu cầu');
+  }
+
+  if (requirements?.experience_years?.min !== undefined) {
+    lines.push(`Kinh nghiệm tối thiểu: ${requirements.experience_years.min} năm`);
+  }
+
+  if (requirements?.height?.min !== undefined) {
+    lines.push(`Chiều cao tối thiểu: ${requirements.height.min} cm`);
+  }
+
+  if (requirements?.weight?.min !== undefined) {
+    lines.push(`Cân nặng tối thiểu: ${requirements.weight.min} kg`);
+  }
+
+  return lines.length ? lines : ['Không có yêu cầu cụ thể.'];
+}
+
 function PartnersJobsPage() {
   const [activeTab, setActiveTab] = useState('partners');
   const [loading, setLoading] = useState(false);
@@ -88,26 +165,57 @@ function PartnersJobsPage() {
   const [partners, setPartners] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [jobOrders, setJobOrders] = useState([]);
+  const [educationLevels, setEducationLevels] = useState([]);
+  const [manualCandidates, setManualCandidates] = useState([]);
   const [matchingResult, setMatchingResult] = useState([]);
+  const [jobOrderCandidates, setJobOrderCandidates] = useState([]);
 
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [selectedJobOrderId, setSelectedJobOrderId] = useState('');
+  const [selectedJobDetail, setSelectedJobDetail] = useState(null);
+  const [matchingSearch, setMatchingSearch] = useState('');
+
+  const [manualSearch, setManualSearch] = useState('');
+  const [manualStatusFilter, setManualStatusFilter] = useState('');
+  const [manualEducationFilter, setManualEducationFilter] = useState('');
 
   const [partnerForm, setPartnerForm] = useState(initialPartnerForm);
   const [contactForm, setContactForm] = useState(initialContactForm);
   const [jobForm, setJobForm] = useState(initialJobForm);
+  const [jobEditForm, setJobEditForm] = useState(initialJobForm);
+  const [jobDetailOpen, setJobDetailOpen] = useState(false);
+  const [jobEditOpen, setJobEditOpen] = useState(false);
+  const [jobDetailLoading, setJobDetailLoading] = useState(false);
 
   const tabs = [
     { key: 'partners', label: 'Danh mục đối tác' },
     { key: 'contacts', label: 'Liên hệ đối tác' },
     { key: 'jobs', label: 'Kho đơn hàng' },
-    { key: 'matching', label: 'Đối khớp có điều kiện' }
+    { key: 'matching', label: 'Đối khớp có điều kiện' },
+    { key: 'manual', label: 'Ghép thủ công ứng viên' }
   ];
 
   const selectedJob = useMemo(
     () => jobOrders.find((item) => String(item.id) === String(selectedJobOrderId)),
     [jobOrders, selectedJobOrderId]
   );
+
+  const educationNameMap = useMemo(() => {
+    const map = {};
+    educationLevels.forEach((item) => {
+      map[String(item.id)] = item.name;
+    });
+    return map;
+  }, [educationLevels]);
+
+  const filteredManualCandidates = useMemo(() => {
+    return manualCandidates.filter((candidate) => {
+      if (manualEducationFilter && String(candidate.education_level || '') !== manualEducationFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [manualCandidates, manualEducationFilter]);
 
   const showError = (err) => {
     toast.error(getErrorMessage(err));
@@ -136,10 +244,39 @@ function PartnersJobsPage() {
     setJobOrders(res.data || []);
   };
 
+  const loadJobOrderDetail = async (jobOrderId) => {
+    const [jobDetailRes, jobCandidatesRes] = await Promise.all([
+      jobOrderService.getJobOrderById(jobOrderId),
+      jobOrderService.getJobOrderCandidates(jobOrderId)
+    ]);
+
+    const detail = jobDetailRes.data || null;
+    setSelectedJobDetail(detail);
+    setJobOrderCandidates(jobCandidatesRes.data || []);
+
+    if (detail) {
+      setJobEditForm(buildJobFormFromOrder(detail));
+    }
+  };
+
+  const loadEducationLevels = async () => {
+    const res = await educationLevelService.getEducationLevels({ page: 1, limit: 120 });
+    setEducationLevels(res.data || []);
+  };
+
+  const loadManualCandidates = async ({ search = manualSearch, status = manualStatusFilter } = {}) => {
+    const params = { page: 1, limit: 300 };
+    if (search) params.search = search;
+    if (status) params.status = status;
+
+    const res = await recruitmentService.getCandidates(params);
+    setManualCandidates(res.data || []);
+  };
+
   const reloadAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadPartners(), loadJobOrders()]);
+      await Promise.all([loadPartners(), loadJobOrders(), loadEducationLevels(), loadManualCandidates()]);
       if (selectedPartnerId) {
         await loadContacts(selectedPartnerId);
       }
@@ -242,7 +379,81 @@ function PartnersJobsPage() {
     }
   };
 
-  const runMatching = async () => {
+  const openJobDetailModal = async (jobOrderId) => {
+    setJobDetailLoading(true);
+    try {
+      await loadJobOrderDetail(jobOrderId);
+      setJobDetailOpen(true);
+    } catch (err) {
+      showError(err);
+    } finally {
+      setJobDetailLoading(false);
+    }
+  };
+
+  const openJobEditModal = async (jobOrderId) => {
+    setJobDetailLoading(true);
+    try {
+      await loadJobOrderDetail(jobOrderId);
+      setJobEditOpen(true);
+    } catch (err) {
+      showError(err);
+    } finally {
+      setJobDetailLoading(false);
+    }
+  };
+
+  const handleUpdateJobOrder = async (event) => {
+    event.preventDefault();
+
+    if (!selectedJobDetail?.id) {
+      toast.error('Không tìm thấy đơn hàng cần cập nhật.');
+      return;
+    }
+
+    try {
+      await jobOrderService.updateJobOrder(selectedJobDetail.id, {
+        partner_id: Number(jobEditForm.partner_id),
+        job_title: jobEditForm.job_title,
+        quantity_needed: Number(jobEditForm.quantity_needed),
+        salary_info: jobEditForm.salary_info,
+        deadline: jobEditForm.deadline,
+        status: jobEditForm.status,
+        requirements: buildRequirements(jobEditForm)
+      });
+
+      showSuccess('Đã cập nhật đơn hàng.');
+      await Promise.all([
+        loadJobOrders(),
+        loadJobOrderDetail(selectedJobDetail.id),
+        refreshMatchingForJob(selectedJobDetail.id)
+      ]);
+      setJobEditOpen(false);
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const handleRemoveCandidateFromJobOrder = async (candidateId) => {
+    if (!selectedJobDetail?.id) {
+      toast.error('Không tìm thấy đơn hàng đang thao tác.');
+      return;
+    }
+
+    try {
+      await jobOrderService.removeCandidateFromJobOrder(selectedJobDetail.id, candidateId);
+      showSuccess('Đã xóa ứng viên khỏi đơn hàng.');
+      await Promise.all([
+        loadJobOrders(),
+        loadJobOrderDetail(selectedJobDetail.id),
+        refreshMatchingForJob(selectedJobDetail.id)
+      ]);
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const runMatching = async ({ switchToMatchingTab = true, showToastOnSuccess = true } = {}) => {
     if (!selectedJobOrderId) {
       toast.error('Vui lòng chọn đơn hàng.');
       return;
@@ -251,11 +462,52 @@ function PartnersJobsPage() {
     try {
       const res = await jobOrderService.getMatchingCandidates(selectedJobOrderId, {
         page: 1,
-        limit: 80
+        limit: 200,
+        search: matchingSearch || undefined
       });
       setMatchingResult(res.data || []);
-      setActiveTab('matching');
-      showSuccess('Đã tải danh sách đối khớp.');
+      if (switchToMatchingTab) {
+        setActiveTab('matching');
+      }
+      if (showToastOnSuccess) {
+        showSuccess('Đã tải danh sách đối khớp.');
+      }
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const runManualCandidateSearch = async () => {
+    try {
+      await loadManualCandidates();
+      showSuccess('Đã tải danh sách ứng viên.');
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const refreshMatchingForJob = async (jobOrderId) => {
+    if (!selectedJobOrderId || String(selectedJobOrderId) !== String(jobOrderId)) {
+      return;
+    }
+
+    await runMatching({ switchToMatchingTab: false, showToastOnSuccess: false });
+  };
+
+  const handleManualMatch = async (candidateId) => {
+    if (!selectedJobOrderId) {
+      toast.error('Vui lòng chọn đơn hàng trước khi thêm ứng viên.');
+      return;
+    }
+
+    try {
+      await jobOrderService.manualMatchCandidate(selectedJobOrderId, candidateId);
+      showSuccess('Đã thêm ứng viên vào đơn hàng.');
+      await Promise.all([
+        loadJobOrders(),
+        loadManualCandidates(),
+        runMatching({ switchToMatchingTab: false, showToastOnSuccess: false })
+      ]);
     } catch (err) {
       showError(err);
     }
@@ -633,11 +885,43 @@ function PartnersJobsPage() {
                 </select>
               </label>
               <label>
-                Học vấn (phân tách dấu phẩy)
-                <input
-                  value={jobForm.req_education}
-                  onChange={(e) => setJobForm((prev) => ({ ...prev, req_education: e.target.value }))}
-                />
+                Học vấn yêu cầu (chọn nhiều)
+                <div className="education-checkbox-list">
+                  {educationLevels.length ? (
+                    educationLevels.map((level) => {
+                      const levelValue = String(level.id);
+                      const checked = jobForm.req_education.includes(levelValue);
+
+                      return (
+                        <label key={level.id} className="inline-label education-checkbox-item">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setJobForm((prev) => {
+                                const current = Array.isArray(prev.req_education)
+                                  ? prev.req_education
+                                  : [];
+                                const next = e.target.checked
+                                  ? [...current, levelValue]
+                                  : current.filter((item) => item !== levelValue);
+
+                                return {
+                                  ...prev,
+                                  req_education: next
+                                };
+                              })
+                            }
+                          />
+                          <span>{level.name}</span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <span className="tiny muted">Chưa có danh mục học vấn.</span>
+                  )}
+                </div>
+                <span className="tiny muted">Bạn có thể tích chọn nhiều học vấn.</span>
               </label>
               <label>
                 Kinh nghiệm tối thiểu (năm)
@@ -680,6 +964,7 @@ function PartnersJobsPage() {
                     <th>ID</th>
                     <th>Đơn hàng</th>
                     <th>Đối tác</th>
+                    <th>Ứng viên</th>
                     <th>Trạng thái</th>
                     <th>Hạn chót</th>
                     <th></th>
@@ -695,12 +980,27 @@ function PartnersJobsPage() {
                         <span className="tiny">SL {job.quantity_needed}</span>
                       </td>
                       <td>{job.partner_name}</td>
+                      <td>{Number(job.matched_candidates_count || 0)}</td>
                       <td>
                         <span className="badge">{JOB_ORDER_STATUS_LABELS[job.status] || job.status}</span>
                       </td>
                       <td>{formatDate(job.deadline)}</td>
                       <td>
                         <div className="row-actions">
+                          <button
+                            className="btn small ghost"
+                            type="button"
+                            onClick={() => openJobDetailModal(job.id)}
+                          >
+                            Chi tiết
+                          </button>
+                          <button
+                            className="btn small"
+                            type="button"
+                            onClick={() => openJobEditModal(job.id)}
+                          >
+                            Sửa
+                          </button>
                           <button
                             className="btn small"
                             type="button"
@@ -724,7 +1024,7 @@ function PartnersJobsPage() {
                   ))}
                   {!jobOrders.length ? (
                     <tr>
-                      <td colSpan={6} className="center muted">
+                      <td colSpan={7} className="center muted">
                         Chưa có đơn hàng.
                       </td>
                     </tr>
@@ -753,6 +1053,11 @@ function PartnersJobsPage() {
                     </option>
                   ))}
                 </select>
+                <input
+                  placeholder="Tìm theo CCCD / tên / liên hệ"
+                  value={matchingSearch}
+                  onChange={(e) => setMatchingSearch(e.target.value)}
+                />
                 <button className="btn" type="button" onClick={runMatching}>
                   Chạy đối khớp
                 </button>
@@ -763,7 +1068,11 @@ function PartnersJobsPage() {
           {selectedJob ? (
             <div className="code-block">
               <p className="tiny strong">Yêu cầu đơn hàng</p>
-              <pre>{JSON.stringify(safeJsonParse(selectedJob.requirements, {}), null, 2)}</pre>
+              <ul className="inline-list">
+                {formatRequirementText(selectedJob.requirements, educationNameMap).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
@@ -774,8 +1083,7 @@ function PartnersJobsPage() {
                   <th>ID</th>
                   <th>Ứng viên</th>
                   <th>Trạng thái</th>
-                  <th>Phí 0</th>
-                  <th>Hồ sơ đã xác minh</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -785,16 +1093,24 @@ function PartnersJobsPage() {
                     <td>
                       <strong>{row.full_name}</strong>
                       <br />
-                      <span className="tiny">{row.phone || row.email || '-'}</span>
+                      <span className="tiny">{row.citizen_id} - {row.phone || row.email || '-'}</span>
                     </td>
                     <td>{CANDIDATE_STATUS_LABELS[row.status] || row.status}</td>
-                    <td>{row.is_fee0_paid ? 'Đã đóng' : 'Chưa đóng'}</td>
-                    <td className="tiny">{row.verified_doc_codes || '-'}</td>
+                    <td>
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={!selectedJobOrderId}
+                        onClick={() => handleManualMatch(row.id)}
+                      >
+                        Ghép vào đơn
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {!matchingResult.length ? (
                   <tr>
-                    <td colSpan={5} className="center muted">
+                    <td colSpan={4} className="center muted">
                       Chưa có ứng viên phù hợp.
                     </td>
                   </tr>
@@ -804,6 +1120,462 @@ function PartnersJobsPage() {
           </div>
         </div>
       ) : null}
+
+      {activeTab === 'manual' ? (
+        <div className="surface">
+          <SectionHeader
+            title="Ghép ứng viên thủ công vào đơn hàng"
+            action={
+              <div className="inline-form">
+                <select
+                  value={selectedJobOrderId}
+                  onChange={(e) => setSelectedJobOrderId(e.target.value)}
+                >
+                  <option value="">Chọn đơn hàng để thêm ứng viên</option>
+                  {jobOrders.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      #{job.id} {job.job_title}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn" type="button" onClick={runManualCandidateSearch}>
+                  Tải danh sách
+                </button>
+              </div>
+            }
+          />
+
+          <div className="filter-row">
+            <input
+              placeholder="Tìm theo CCCD / tên / SĐT / email"
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+            />
+            <select
+              value={manualStatusFilter}
+              onChange={(e) => setManualStatusFilter(e.target.value)}
+            >
+              <option value="">Tất cả trạng thái</option>
+              {CANDIDATE_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {CANDIDATE_STATUS_LABELS[status] || status}
+                </option>
+              ))}
+            </select>
+            <button className="btn" type="button" onClick={runManualCandidateSearch}>
+              Tìm kiếm
+            </button>
+          </div>
+
+          <div className="inline-form" style={{ marginBottom: 12 }}>
+            <label className="inline-label">
+              Học vấn
+              <select
+                value={manualEducationFilter}
+                onChange={(e) => setManualEducationFilter(e.target.value)}
+              >
+                <option value="">Tất cả học vấn</option>
+                {educationLevels.map((level) => (
+                  <option key={level.id} value={String(level.id)}>
+                    {level.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="tiny muted">
+              {selectedJobOrderId
+                ? `Đơn hàng đang chọn: #${selectedJobOrderId}`
+                : 'Chưa chọn đơn hàng. Hãy chọn trước khi thêm ứng viên.'}
+            </span>
+          </div>
+
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>CCCD</th>
+                  <th>Ứng viên</th>
+                  <th>Trạng thái</th>
+                  <th>Học vấn</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredManualCandidates.map((row) => {
+                  const canManualMatch =
+                    ['PAID0_DOCS_SUBMITTED', 'WAITING_FORM_MATCH'].includes(row.status);
+                  return (
+                    <tr key={row.id}>
+                      <td>{row.id}</td>
+                      <td>{row.citizen_id || '-'}</td>
+                      <td>
+                        <strong>{row.full_name}</strong>
+                        <br />
+                        <span className="tiny">{row.phone || row.email || '-'}</span>
+                      </td>
+                      <td>{CANDIDATE_STATUS_LABELS[row.status] || row.status}</td>
+                      <td>{educationNameMap[String(row.education_level)] || '-'}</td>
+                      <td>
+                        <button
+                          className="btn small"
+                          type="button"
+                          disabled={!selectedJobOrderId || !canManualMatch}
+                          onClick={() => handleManualMatch(row.id)}
+                          title={
+                            !selectedJobOrderId
+                              ? 'Chọn đơn hàng trước khi thêm ứng viên.'
+                              : !canManualMatch
+                                ? 'Ứng viên cần ở trạng thái Đã nộp hồ sơ hoặc Chờ ghép form.'
+                                : 'Thêm ứng viên vào đơn hàng'
+                          }
+                        >
+                          Thêm vào đơn
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!filteredManualCandidates.length ? (
+                  <tr>
+                    <td colSpan={6} className="center muted">
+                      Không có ứng viên theo bộ lọc hiện tại.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      <DetailModal
+        open={jobDetailOpen}
+        title={selectedJobDetail ? `Chi tiết đơn hàng #${selectedJobDetail.id}` : 'Chi tiết đơn hàng'}
+        onClose={() => setJobDetailOpen(false)}
+        footer={
+          selectedJobDetail ? (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                setJobDetailOpen(false);
+                setJobEditOpen(true);
+              }}
+            >
+              Sửa đơn hàng
+            </button>
+          ) : null
+        }
+      >
+        {jobDetailLoading ? <p className="muted">Đang tải chi tiết...</p> : null}
+
+        {selectedJobDetail ? (
+          <>
+            <div className="stats-inline">
+              <div className="mini-stat">
+                <span>Đơn hàng</span>
+                <strong>{selectedJobDetail.job_title}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Đối tác</span>
+                <strong>{selectedJobDetail.partner_name || '-'}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Số ứng viên trong đơn</span>
+                <strong>{jobOrderCandidates.length}</strong>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="data-table">
+                <tbody>
+                  <tr>
+                    <th>Trạng thái</th>
+                    <td>{JOB_ORDER_STATUS_LABELS[selectedJobDetail.status] || selectedJobDetail.status}</td>
+                    <th>Số lượng cần</th>
+                    <td>{selectedJobDetail.quantity_needed}</td>
+                  </tr>
+                  <tr>
+                    <th>Hạn chót</th>
+                    <td>{formatDate(selectedJobDetail.deadline)}</td>
+                    <th>Mức lương</th>
+                    <td>{selectedJobDetail.salary_info || '-'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="code-block">
+              <p className="tiny strong">Điều kiện đơn hàng</p>
+              <ul className="inline-list">
+                {formatRequirementText(selectedJobDetail.requirements, educationNameMap).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <SectionHeader title="Danh sách ứng viên trong đơn hàng" />
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>CCCD</th>
+                    <th>Ứng viên</th>
+                    <th>Trạng thái ứng viên</th>
+                    <th>KQ thi</th>
+                    <th>Ngày thi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobOrderCandidates.map((candidate) => (
+                    <tr key={candidate.exam_application_id}>
+                      <td>{candidate.citizen_id || '-'}</td>
+                      <td>
+                        <strong>{candidate.full_name}</strong>
+                        <br />
+                        <span className="tiny">{candidate.phone || candidate.email || '-'}</span>
+                      </td>
+                      <td>{CANDIDATE_STATUS_LABELS[candidate.candidate_status] || candidate.candidate_status}</td>
+                      <td>{candidate.result_status || '-'}</td>
+                      <td>{formatDate(candidate.exam_date)}</td>
+                    </tr>
+                  ))}
+                  {!jobOrderCandidates.length ? (
+                    <tr>
+                      <td colSpan={5} className="center muted">
+                        Đơn hàng chưa có ứng viên nào.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+      </DetailModal>
+
+      <DetailModal
+        open={jobEditOpen}
+        title={selectedJobDetail ? `Sửa đơn hàng #${selectedJobDetail.id}` : 'Sửa đơn hàng'}
+        onClose={() => setJobEditOpen(false)}
+      >
+        {selectedJobDetail ? (
+          <form className="grid-form" onSubmit={handleUpdateJobOrder}>
+            <label>
+              Đối tác
+              <select
+                required
+                value={jobEditForm.partner_id}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, partner_id: e.target.value }))}
+              >
+                <option value="">Chọn đối tác</option>
+                {partners.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Tên đơn hàng
+              <input
+                required
+                value={jobEditForm.job_title}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, job_title: e.target.value }))}
+              />
+            </label>
+            <label>
+              Số lượng
+              <input
+                required
+                type="number"
+                min="1"
+                value={jobEditForm.quantity_needed}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, quantity_needed: e.target.value }))}
+              />
+            </label>
+            <label>
+              Mức lương
+              <input
+                value={jobEditForm.salary_info}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, salary_info: e.target.value }))}
+              />
+            </label>
+            <label>
+              Hạn chót
+              <input
+                required
+                type="date"
+                value={jobEditForm.deadline}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, deadline: e.target.value }))}
+              />
+            </label>
+            <label>
+              Trạng thái
+              <select
+                value={jobEditForm.status}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, status: e.target.value }))}
+              >
+                {JOB_ORDER_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {JOB_ORDER_STATUS_LABELS[status] || status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Tuổi tối thiểu
+              <input
+                type="number"
+                value={jobEditForm.req_age_min}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_age_min: e.target.value }))}
+              />
+            </label>
+            <label>
+              Tuổi tối đa
+              <input
+                type="number"
+                value={jobEditForm.req_age_max}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_age_max: e.target.value }))}
+              />
+            </label>
+            <label>
+              Giới tính
+              <select
+                value={jobEditForm.req_gender}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_gender: e.target.value }))}
+              >
+                <option value="any">Tất cả</option>
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+              </select>
+            </label>
+            <label>
+              Học vấn yêu cầu (chọn nhiều)
+              <div className="education-checkbox-list">
+                {educationLevels.length ? (
+                  educationLevels.map((level) => {
+                    const levelValue = String(level.id);
+                    const checked = jobEditForm.req_education.includes(levelValue);
+
+                    return (
+                      <label key={level.id} className="inline-label education-checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setJobEditForm((prev) => {
+                              const current = Array.isArray(prev.req_education)
+                                ? prev.req_education
+                                : [];
+                              const next = e.target.checked
+                                ? [...current, levelValue]
+                                : current.filter((item) => item !== levelValue);
+
+                              return {
+                                ...prev,
+                                req_education: next
+                              };
+                            })
+                          }
+                        />
+                        <span>{level.name}</span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <span className="tiny muted">Chưa có danh mục học vấn.</span>
+                )}
+              </div>
+            </label>
+            <label>
+              Kinh nghiệm tối thiểu (năm)
+              <input
+                type="number"
+                value={jobEditForm.req_experience_min}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_experience_min: e.target.value }))}
+              />
+            </label>
+            <label>
+              Chiều cao tối thiểu
+              <input
+                type="number"
+                value={jobEditForm.req_height_min}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_height_min: e.target.value }))}
+              />
+            </label>
+            <label>
+              Cân nặng tối thiểu
+              <input
+                type="number"
+                value={jobEditForm.req_weight_min}
+                onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_weight_min: e.target.value }))}
+              />
+            </label>
+
+            <div className="field-span-2">
+              <SectionHeader title="Danh sách ứng viên trong đơn hàng" />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>CCCD</th>
+                      <th>Ứng viên</th>
+                      <th>KQ thi</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobOrderCandidates.map((candidate) => (
+                      <tr key={candidate.exam_application_id}>
+                        <td>{candidate.citizen_id || '-'}</td>
+                        <td>
+                          <strong>{candidate.full_name}</strong>
+                          <br />
+                          <span className="tiny">{candidate.phone || candidate.email || '-'}</span>
+                        </td>
+                        <td>{candidate.result_status || '-'}</td>
+                        <td>
+                          <button
+                            className="btn text danger"
+                            type="button"
+                            onClick={() => handleRemoveCandidateFromJobOrder(candidate.candidate_id)}
+                            disabled={candidate.result_status !== 'Pending'}
+                            title={
+                              candidate.result_status === 'Pending'
+                                ? 'Xóa ứng viên khỏi đơn hàng'
+                                : 'Chỉ xóa được ứng viên chưa có kết quả thi'
+                            }
+                          >
+                            Xóa khỏi đơn
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!jobOrderCandidates.length ? (
+                      <tr>
+                        <td colSpan={4} className="center muted">
+                          Đơn hàng chưa có ứng viên nào.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="field-span-2 row-actions">
+              <button className="btn" type="submit">
+                Lưu chỉnh sửa
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setJobEditOpen(false)}>
+                Đóng
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </DetailModal>
     </section>
   );
 }

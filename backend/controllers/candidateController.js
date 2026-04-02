@@ -83,7 +83,7 @@ function normalizeCandidatePayload(body) {
     height: toNullableFloat(pickField(body, 'height', 'height')),
     weight: toNullableFloat(pickField(body, 'weight', 'weight')),
     blood_type: pickField(body, 'blood_type', 'bloodType'),
-    education_level: pickField(body, 'education_level', 'educationLevel'),
+    education_level: toNullableInt(pickField(body, 'education_level', 'educationLevel')),
     experience_summary: pickField(body, 'experience_summary', 'experienceSummary'),
     source_id: toNullableInt(pickField(body, 'source_id', 'sourceId')),
     source_note: pickField(body, 'source_note', 'sourceNote'),
@@ -110,6 +110,18 @@ async function validateSourceMandatory(sourceId) {
   }
 }
 
+async function validateEducationLevelOptional(levelId) {
+  if (levelId === undefined || levelId === null) return;
+  if (Number.isNaN(levelId) || levelId <= 0) {
+    throw createHttpError('education_level must be a positive integer or null', 400);
+  }
+
+  const level = await EducationLevel.findById(levelId);
+  if (!level) {
+    throw createHttpError('education_level does not exist', 400);
+  }
+}
+
 function validateCitizenIdRequired(citizenId) {
   if (!citizenId || !isValidCitizenId(citizenId)) {
     throw createHttpError('citizen_id is required and must be exactly 12 digits', 400);
@@ -128,10 +140,6 @@ async function validateCitizenIdUnique(citizenId, excludeCandidateId = null) {
 }
 
 async function validatePreExamGate(candidate, nextStatus) {
-  if (!candidate.is_fee0_paid) {
-    throw createHttpError('Cannot move status: candidate has not paid fee0', 409);
-  }
-
   const readiness = await DocumentModel.getPreExamReadiness(candidate.id);
   if (nextStatus === CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED) {
     if (!readiness.can_submit_profile) {
@@ -209,6 +217,7 @@ const candidateController = {
       await validateCitizenIdUnique(payload.citizen_id);
 
       await validateSourceMandatory(payload.source_id);
+      await validateEducationLevelOptional(payload.education_level);
 
       if (Number.isNaN(payload.height)) {
         return next(createHttpError('Invalid height', 400));
@@ -289,6 +298,10 @@ const candidateController = {
 
       if (payload.source_id !== undefined) {
         await validateSourceMandatory(payload.source_id);
+      }
+
+      if (payload.education_level !== undefined) {
+        await validateEducationLevelOptional(payload.education_level);
       }
 
       if (Number.isNaN(payload.height)) {
