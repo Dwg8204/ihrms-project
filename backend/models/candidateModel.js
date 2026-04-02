@@ -282,9 +282,6 @@ const Candidate = {
     // --- Gate Conditions ---
     switch (newStatus) {
       case CANDIDATE_STATUSES.PAID0_DOCS_SUBMITTED:
-        if (!candidate.is_fee0_paid) {
-          throw new Error('Candidate has not paid Fee 0 (is_fee0_paid = 0).');
-        }
         const readiness = await DocumentModel.getPreExamReadiness(candidateId);
         if (!readiness.can_submit_profile) {
           throw new Error(

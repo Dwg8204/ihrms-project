@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
 import SegmentTabs from '../components/SegmentTabs';
 import { useToast } from '../components/ToastProvider';
+import DetailModal from '../components/DetailModal';
 import { recruitmentService } from '../services/recruitmentService';
+import { educationLevelService } from '../services/educationLevelService';
 import { jobOrderService } from '../services/jobOrderService';
 import { examApplicationService } from '../services/examApplicationService';
 import { documentService } from '../services/documentService';
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from '../utils/constants';
-import { formatDate, formatDateTime, formatCurrency } from '../utils/format';
+import { formatDate, formatDateTime } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
 
 const initialCandidateForm = {
@@ -25,9 +27,6 @@ const initialCandidateForm = {
   experience_summary: '',
   source_id: '',
   source_note: '',
-  is_fee0_paid: false,
-  fee0_paid_amount: '',
-  fee0_paid_at: '',
   cv_file: null
 };
 
@@ -35,27 +34,20 @@ const initialTransitionDraft = {
   status: '',
   jobOrderId: '',
   examDate: '',
-  examApplicationId: '',
-  note: ''
+  examApplicationId: ''
 };
 
 const emptyReadiness = {
+  can_submit_profile: false,
+  can_proceed_verified: false,
   can_proceed: false,
   required_total: 0,
+  submitted_total: 0,
   verified_total: 0,
+  missing_submitted_documents: [],
+  missing_verified_documents: [],
   missing_documents: []
 };
-
-function toDateTimeLocal(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const pad = (num) => String(num).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours()
-  )}:${pad(date.getMinutes())}`;
-}
 
 function toCandidateForm(candidate) {
   return {
@@ -69,13 +61,13 @@ function toCandidateForm(candidate) {
     height: candidate.height ?? '',
     weight: candidate.weight ?? '',
     blood_type: candidate.blood_type || '',
-    education_level: candidate.education_level || '',
+    education_level:
+      candidate.education_level !== null && candidate.education_level !== undefined
+        ? String(candidate.education_level)
+        : '',
     experience_summary: candidate.experience_summary || '',
     source_id: candidate.source_id ? String(candidate.source_id) : '',
     source_note: candidate.source_note || '',
-    is_fee0_paid: Boolean(candidate.is_fee0_paid),
-    fee0_paid_amount: candidate.fee0_paid_amount ?? '',
-    fee0_paid_at: toDateTimeLocal(candidate.fee0_paid_at),
     cv_file: null
   };
 }
@@ -115,11 +107,13 @@ function RecruitmentPage() {
   const [candidateForm, setCandidateForm] = useState(initialCandidateForm);
   const [editForm, setEditForm] = useState(initialCandidateForm);
   const [editingCandidateId, setEditingCandidateId] = useState(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const [filters, setFilters] = useState({ search: '', status: '', source_id: '' });
   const [transitionDrafts, setTransitionDrafts] = useState({});
 
   const [candidates, setCandidates] = useState([]);
+  const [educationLevels, setEducationLevels] = useState([]);
   const [kanban, setKanban] = useState([]);
   const [summary, setSummary] = useState({ by_status: [], by_source: [] });
   const [jobOrders, setJobOrders] = useState([]);
@@ -140,6 +134,12 @@ function RecruitmentPage() {
     sources.forEach((item) => map.set(String(item.id), item.source_name));
     return map;
   }, [sources]);
+
+  const educationLevelMap = useMemo(() => {
+    const map = new Map();
+    educationLevels.forEach((item) => map.set(String(item.id), item.name));
+    return map;
+  }, [educationLevels]);
 
   const openJobOrders = useMemo(
     () => jobOrders.filter((job) => job.status === 'OPEN'),
@@ -170,11 +170,6 @@ function RecruitmentPage() {
     Object.entries(form).forEach(([key, value]) => {
       if (key === 'cv_file') {
         if (value) payload.append('cv_file', value);
-        return;
-      }
-
-      if (key === 'is_fee0_paid') {
-        payload.append('is_fee0_paid', value ? '1' : '0');
         return;
       }
 
@@ -211,6 +206,11 @@ function RecruitmentPage() {
     setCandidates(res.data || []);
   };
 
+  const loadEducationLevels = async () => {
+    const res = await educationLevelService.getEducationLevels({ page: 1, limit: 200 });
+    setEducationLevels(res.data || []);
+  };
+
   const loadKanban = async () => {
     const params = { limit_per_status: 30 };
     if (filters.source_id) params.source_id = filters.source_id;
@@ -238,6 +238,7 @@ function RecruitmentPage() {
     try {
       await Promise.all([
         loadSources(),
+        loadEducationLevels(),
         loadCandidates(),
         loadKanban(),
         loadSummary(),
@@ -348,6 +349,7 @@ function RecruitmentPage() {
       ]);
       setCandidateDetail(candidateRes.data || null);
       setDetailReadiness(readinessRes.data || emptyReadiness);
+      setDetailModalOpen(true);
     } catch (err) {
       setDetailReadiness(emptyReadiness);
       showError(err);
@@ -374,6 +376,17 @@ function RecruitmentPage() {
   };
 
   const handleCancelEdit = () => {
+    setEditingCandidateId(null);
+    setEditForm(initialCandidateForm);
+  };
+
+  const handleCloseDetailModal = () => {
+    setDetailModalOpen(false);
+    setCandidateDetail(null);
+    setDetailReadiness(emptyReadiness);
+  };
+
+  const handleCloseEditModal = () => {
     setEditingCandidateId(null);
     setEditForm(initialCandidateForm);
   };
@@ -410,12 +423,24 @@ function RecruitmentPage() {
           return;
         }
 
-        await examApplicationService.createExamApplication({
-          candidate_id: candidate.id,
-          job_order_id: Number(draft.jobOrderId),
-          exam_date: draft.examDate,
-          note: draft.note || null
-        });
+        const pendingExam = (pendingExamByCandidate.get(String(candidate.id)) || [])[0] || null;
+
+        if (pendingExam) {
+          if (Number(pendingExam.job_order_id) !== Number(draft.jobOrderId)) {
+            toast.error('Ứng viên đã được ghép với đơn hàng khác. Vui lòng kiểm tra lại đơn hàng.');
+            return;
+          }
+
+          await examApplicationService.updateExamSchedule(pendingExam.id, {
+            exam_date: draft.examDate
+          });
+        } else {
+          await examApplicationService.createExamApplication({
+            candidate_id: candidate.id,
+            job_order_id: Number(draft.jobOrderId),
+            exam_date: draft.examDate
+          });
+        }
       } else if (canUseExamResult(targetStatus)) {
         if (!draft.examApplicationId) {
           toast.error('Cần chọn phiếu thi đang chờ kết quả.');
@@ -423,8 +448,7 @@ function RecruitmentPage() {
         }
 
         await examApplicationService.updateExamResult(draft.examApplicationId, {
-          result_status: getExamResultStatus(targetStatus),
-          note: draft.note || null
+          result_status: getExamResultStatus(targetStatus)
         });
       } else {
         await recruitmentService.updateCandidateStatus(candidate.id, targetStatus);
@@ -514,10 +538,17 @@ function RecruitmentPage() {
       </label>
       <label>
         Học vấn
-        <input
+        <select
           value={form.education_level}
           onChange={(e) => onFieldChange('education_level', e.target.value)}
-        />
+        >
+          <option value="">Chọn trình độ</option>
+          {educationLevels.map((level) => (
+            <option key={level.id} value={level.id}>
+              {level.name}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
         Kinh nghiệm
@@ -535,30 +566,6 @@ function RecruitmentPage() {
         <input
           value={form.source_note}
           onChange={(e) => onFieldChange('source_note', e.target.value)}
-        />
-      </label>
-      <label>
-        Đã đóng phí đợt 0
-        <input
-          type="checkbox"
-          checked={form.is_fee0_paid}
-          onChange={(e) => onFieldChange('is_fee0_paid', e.target.checked)}
-        />
-      </label>
-      <label>
-        Số tiền đợt 0
-        <input
-          type="number"
-          value={form.fee0_paid_amount}
-          onChange={(e) => onFieldChange('fee0_paid_amount', e.target.value)}
-        />
-      </label>
-      <label>
-        Thời điểm đóng phí đợt 0
-        <input
-          type="datetime-local"
-          value={form.fee0_paid_at}
-          onChange={(e) => onFieldChange('fee0_paid_at', e.target.value)}
         />
       </label>
       <label>
@@ -615,7 +622,6 @@ function RecruitmentPage() {
                   <li>Email: {candidateDetail.email || '-'}</li>
                   <li>Nguồn: {candidateDetail.source_name || '-'}</li>
                   <li>Trạng thái: {CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</li>
-                  <li>Phí đợt 0: {candidateDetail.is_fee0_paid ? formatCurrency(candidateDetail.fee0_paid_amount) : 'Chưa đóng'}</li>
                 </ul>
                 {candidateDetail.cv_file_url ? (
                   <p style={{ marginTop: 12 }}>
@@ -637,14 +643,14 @@ function RecruitmentPage() {
                   </div>
                   <div className="pill-item">
                     <span>Đủ điều kiện ghép form</span>
-                    <strong>{detailReadiness.can_proceed ? 'Có' : 'Chưa'}</strong>
+                    <strong>{detailReadiness.can_submit_profile ? 'Có' : 'Chưa'}</strong>
                   </div>
                 </div>
-                {detailReadiness.missing_documents?.length ? (
+                {detailReadiness.missing_submitted_documents?.length ? (
                   <div style={{ marginTop: 12 }}>
-                    <p className="tiny">Giấy tờ chưa đạt VERIFIED:</p>
+                    <p className="tiny">Giấy tờ chưa đạt trạng thái đã nộp:</p>
                     <ul className="inline-list">
-                      {detailReadiness.missing_documents.map((item) => (
+                      {detailReadiness.missing_submitted_documents.map((item) => (
                         <li key={item.code || item.name}>{item.name || item.code}</li>
                       ))}
                     </ul>
@@ -794,7 +800,6 @@ function RecruitmentPage() {
                   <th>Ứng viên</th>
                   <th>Nguồn</th>
                   <th>Trạng thái</th>
-                  <th>Phí đợt 0</th>
                   <th>CV</th>
                   <th>Ngày tạo</th>
                   <th>Thao tác</th>
@@ -819,7 +824,6 @@ function RecruitmentPage() {
                           {CANDIDATE_STATUS_LABELS[row.status] || row.status}
                         </span>
                       </td>
-                      <td>{row.is_fee0_paid ? formatCurrency(row.fee0_paid_amount) : 'Chưa đóng'}</td>
                       <td>
                         {row.cv_file_url ? (
                           <a href={row.cv_file_url} target="_blank" rel="noreferrer">
@@ -901,15 +905,6 @@ function RecruitmentPage() {
                                 }
                               />
                             </label>
-                            <label className="field-span-2">
-                              Ghi chú
-                              <input
-                                value={draft.note}
-                                onChange={(e) =>
-                                  setTransitionDraft(row.id, 'note', e.target.value, row.status)
-                                }
-                              />
-                            </label>
                           </div>
                         ) : null}
                         {canUseExamResult(draft.status || row.status) ? (
@@ -930,15 +925,6 @@ function RecruitmentPage() {
                                 ))}
                               </select>
                             </label>
-                            <label className="field-span-2">
-                              Ghi chú kết quả
-                              <input
-                                value={draft.note}
-                                onChange={(e) =>
-                                  setTransitionDraft(row.id, 'note', e.target.value, row.status)
-                                }
-                              />
-                            </label>
                           </div>
                         ) : null}
                       </td>
@@ -947,7 +933,7 @@ function RecruitmentPage() {
                 })}
                 {!candidates.length ? (
                   <tr>
-                    <td colSpan={8} className="muted center">
+                    <td colSpan={7} className="muted center">
                       Không có ứng viên.
                     </td>
                   </tr>
@@ -956,135 +942,6 @@ function RecruitmentPage() {
             </table>
           </div>
 
-          {candidateDetail ? (
-            <div className="surface" style={{ marginTop: 14 }}>
-              <SectionHeader
-                title={`Chi tiết ứng viên CCCD ${candidateDetail.citizen_id || '-'}`}
-                action={
-                  <button className="btn text" type="button" onClick={() => setCandidateDetail(null)}>
-                    Đóng
-                  </button>
-                }
-              />
-
-              <div className="stats-inline">
-                <div className="mini-stat">
-                  <span>CCCD</span>
-                  <strong>{candidateDetail.citizen_id || '-'}</strong>
-                </div>
-                <div className="mini-stat">
-                  <span>Ứng viên</span>
-                  <strong>{candidateDetail.full_name || '-'}</strong>
-                </div>
-                <div className="mini-stat">
-                  <span>Nguồn</span>
-                  <strong>{candidateDetail.source_name || '-'}</strong>
-                </div>
-                <div className="mini-stat">
-                  <span>Trạng thái</span>
-                  <strong>{CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</strong>
-                </div>
-                <div className="mini-stat">
-                  <span>Readiness</span>
-                  <strong>
-                    {detailReadiness.verified_total}/{detailReadiness.required_total}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="table-wrap compact-table">
-                <table className="data-table">
-                  <tbody>
-                    <tr>
-                      <th>CCCD</th>
-                      <td>{candidateDetail.citizen_id || '-'}</td>
-                      <th>Điện thoại</th>
-                      <td>{candidateDetail.phone || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Email</th>
-                      <td>{candidateDetail.email || '-'}</td>
-                      <th>Ngày sinh</th>
-                      <td>{formatDate(candidateDetail.dob)}</td>
-                    </tr>
-                    <tr>
-                      <th>Giới tính</th>
-                      <td>{candidateDetail.gender || '-'}</td>
-                      <th>Chiều cao</th>
-                      <td>{candidateDetail.height ?? '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Cân nặng</th>
-                      <td>{candidateDetail.weight ?? '-'}</td>
-                      <th>Nhóm máu</th>
-                      <td>{candidateDetail.blood_type || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Phí đợt 0</th>
-                      <td>
-                        {candidateDetail.is_fee0_paid
-                          ? formatCurrency(candidateDetail.fee0_paid_amount)
-                          : 'Chưa đóng'}
-                      </td>
-                      <th>Học vấn</th>
-                      <td>{candidateDetail.education_level || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Kinh nghiệm</th>
-                      <td colSpan={3}>{candidateDetail.experience_summary || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Địa chỉ</th>
-                      <td colSpan={3}>{candidateDetail.address || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>Ghi chú nguồn</th>
-                      <td colSpan={3}>{candidateDetail.source_note || '-'}</td>
-                    </tr>
-                    <tr>
-                      <th>CV</th>
-                      <td colSpan={3}>
-                        {candidateDetail.cv_file_url ? (
-                          <a href={candidateDetail.cv_file_url} target="_blank" rel="noreferrer">
-                            Mở CV đã upload
-                          </a>
-                        ) : (
-                          'Chưa có CV'
-                        )}
-                      </td>
-                    </tr>
-                    <tr>
-                      <th>Đủ điều kiện ghép form</th>
-                      <td>{detailReadiness.can_proceed ? 'Có' : 'Chưa'}</td>
-                      <th>Hồ sơ thiếu</th>
-                      <td>
-                        {detailReadiness.missing_documents?.length
-                          ? detailReadiness.missing_documents
-                              .map((item) => item.name || item.code)
-                              .join(', ')
-                          : 'Không thiếu'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          {editingCandidateId ? (
-            <div className="surface" style={{ marginTop: 14 }}>
-              <SectionHeader
-                title={`Sửa ứng viên CCCD ${candidateDetail?.citizen_id || editForm.citizen_id || '-'}`}
-              />
-              {renderCandidateForm(
-                editForm,
-                (key, value) => setEditForm((prev) => ({ ...prev, [key]: value })),
-                'Lưu thay đổi',
-                handleUpdateCandidate,
-                true
-              )}
-            </div>
-          ) : null}
         </div>
       ) : null}
 
@@ -1238,6 +1095,130 @@ function RecruitmentPage() {
           </div>
         </>
       ) : null}
+
+      <DetailModal
+        open={detailModalOpen && Boolean(candidateDetail)}
+        title={`Chi tiết ứng viên CCCD ${candidateDetail?.citizen_id || '-'}`}
+        onClose={handleCloseDetailModal}
+      >
+        {candidateDetail ? (
+          <>
+            <div className="stats-inline">
+              <div className="mini-stat">
+                <span>CCCD</span>
+                <strong>{candidateDetail.citizen_id || '-'}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Ứng viên</span>
+                <strong>{candidateDetail.full_name || '-'}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Nguồn</span>
+                <strong>{candidateDetail.source_name || '-'}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Trạng thái</span>
+                <strong>{CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Readiness đã nộp</span>
+                <strong>
+                  {detailReadiness.submitted_total || 0}/{detailReadiness.required_total || 0}
+                </strong>
+              </div>
+            </div>
+
+            <div className="table-wrap compact-table">
+              <table className="data-table">
+                <tbody>
+                  <tr>
+                    <th>CCCD</th>
+                    <td>{candidateDetail.citizen_id || '-'}</td>
+                    <th>Điện thoại</th>
+                    <td>{candidateDetail.phone || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>Email</th>
+                    <td>{candidateDetail.email || '-'}</td>
+                    <th>Ngày sinh</th>
+                    <td>{formatDate(candidateDetail.dob)}</td>
+                  </tr>
+                  <tr>
+                    <th>Giới tính</th>
+                    <td>{candidateDetail.gender || '-'}</td>
+                    <th>Chiều cao</th>
+                    <td>{candidateDetail.height ?? '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>Cân nặng</th>
+                    <td>{candidateDetail.weight ?? '-'}</td>
+                    <th>Nhóm máu</th>
+                    <td>{candidateDetail.blood_type || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>Học vấn</th>
+                    <td colSpan={3}>
+                      {educationLevelMap.get(String(candidateDetail.education_level)) ||
+                        candidateDetail.education_level ||
+                        '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Kinh nghiệm</th>
+                    <td colSpan={3}>{candidateDetail.experience_summary || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>Địa chỉ</th>
+                    <td colSpan={3}>{candidateDetail.address || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>Ghi chú nguồn</th>
+                    <td colSpan={3}>{candidateDetail.source_note || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>CV</th>
+                    <td colSpan={3}>
+                      {candidateDetail.cv_file_url ? (
+                        <a href={candidateDetail.cv_file_url} target="_blank" rel="noreferrer">
+                          Mở CV đã upload
+                        </a>
+                      ) : (
+                        'Chưa có CV'
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Đủ điều kiện nộp hồ sơ</th>
+                    <td>{detailReadiness.can_submit_profile ? 'Có' : 'Chưa'}</td>
+                    <th>Hồ sơ thiếu</th>
+                    <td>
+                      {detailReadiness.missing_submitted_documents?.length
+                        ? detailReadiness.missing_submitted_documents
+                            .map((item) => item.name || item.code)
+                            .join(', ')
+                        : 'Không thiếu'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+      </DetailModal>
+
+      <DetailModal
+        open={Boolean(editingCandidateId)}
+        title={`Sửa ứng viên CCCD ${candidateDetail?.citizen_id || editForm.citizen_id || '-'}`}
+        onClose={handleCloseEditModal}
+      >
+        {renderCandidateForm(
+          editForm,
+          (key, value) => setEditForm((prev) => ({ ...prev, [key]: value })),
+          'Lưu thay đổi',
+          handleUpdateCandidate,
+          true
+        )}
+      </DetailModal>
     </section>
   );
 }

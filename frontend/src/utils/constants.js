@@ -9,7 +9,7 @@ export const CANDIDATE_STATUSES = [
 
 export const CANDIDATE_STATUS_LABELS = {
   NEW_RECEIVED: 'Mới tiếp nhận',
-  PAID0_DOCS_SUBMITTED: 'Đã đóng phí và nộp hồ sơ',
+  PAID0_DOCS_SUBMITTED: 'Đã nộp hồ sơ',
   WAITING_FORM_MATCH: 'Chờ ghép form',
   FORM_MATCHED_WAITING_EXAM: 'Đã ghép form, chờ thi',
   PASSED: 'Đạt',

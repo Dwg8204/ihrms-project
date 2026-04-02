@@ -431,6 +431,23 @@ label {
   font-weight: 700;
 }
 
+.education-checkbox-list {
+  border: 1px solid rgba(17, 35, 33, 0.18);
+  border-radius: 10px;
+  padding: 8px 10px;
+  max-height: 170px;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+  background: var(--white);
+}
+
+.education-checkbox-item {
+  justify-content: flex-start;
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
 .m6-toolbar {
   display: grid;
   gap: 12px;
@@ -1359,6 +1376,54 @@ label {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
+.detail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1150;
+  background: rgba(18, 25, 45, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.detail-modal-card {
+  width: min(980px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 35, 33, 0.14);
+  background: #ffffff;
+  box-shadow: 0 20px 40px rgba(23, 33, 66, 0.28);
+  padding: 16px;
+  animation: riseIn 0.24s ease both;
+}
+
+.detail-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.detail-modal-head h3 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.detail-modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .stats-inline {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1591,5 +1656,15 @@ label {
     right: 10px;
     left: 10px;
     width: auto;
+  }
+
+  .detail-modal-overlay {
+    padding: 12px;
+  }
+
+  .detail-modal-card {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    padding: 12px;
   }
 }

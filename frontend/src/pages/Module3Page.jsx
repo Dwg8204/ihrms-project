@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import DetailModal from "../components/DetailModal";
 import SectionHeader from "../components/SectionHeader";
 import SegmentTabs from "../components/SegmentTabs";
 import { useToast } from "../components/ToastProvider";
 import { recruitmentService } from "../services/recruitmentService";
 import { jobOrderService } from "../services/jobOrderService";
+import { examApplicationService } from "../services/examApplicationService";
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from "../utils/constants";
-import { formatDate } from "../utils/format";
+import { formatDate, formatDateTime } from "../utils/format";
 import { getErrorMessage } from "../utils/toast";
 import { useI18n } from "../i18n/I18nProvider";
 
-const STORAGE_EXAM_KEY = "ihrms_m3_exam_records";
 const STORAGE_TRAINING_KEY = "ihrms_m3_training_records";
 
 const initialExamForm = {
-  candidateId: "",
   jobOrderId: "",
   examDate: "",
-  note: "",
+  selectedExamAppIds: []
 };
 
 const initialTrainingForm = {
@@ -25,7 +25,7 @@ const initialTrainingForm = {
   sessionDate: "",
   trainer: "",
   score: "",
-  note: "",
+  note: ""
 };
 
 function safeLoadArray(key, fallback = []) {
@@ -46,6 +46,17 @@ function formatShortDate(value, locale) {
   return dt.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
+function toDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
 function getInitials(name) {
   if (!name) return "--";
   return String(name)
@@ -63,48 +74,93 @@ function getCandidateLabel(candidate) {
 
 function Module3Page() {
   const { t, locale } = useI18n();
-  const [activeTab, setActiveTab] = useState("exam-list");
   const toast = useToast();
+
+  const [activeTab, setActiveTab] = useState("exam-list");
   const [loading, setLoading] = useState(false);
+
   const [candidates, setCandidates] = useState([]);
   const [jobOrders, setJobOrders] = useState([]);
-  const [examForm, setExamForm] = useState(initialExamForm);
-  const [trainingForm, setTrainingForm] = useState(initialTrainingForm);
-  const [examRecords, setExamRecords] = useState(() => safeLoadArray(STORAGE_EXAM_KEY));
+  const [examRecords, setExamRecords] = useState([]);
+  const [scheduleSessions, setScheduleSessions] = useState([]);
+  const [resultSessions, setResultSessions] = useState([]);
   const [trainingRecords, setTrainingRecords] = useState(() =>
     safeLoadArray(STORAGE_TRAINING_KEY)
   );
   const [kanbanBoard, setKanbanBoard] = useState([]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_EXAM_KEY, JSON.stringify(examRecords));
-  }, [examRecords]);
+  const [pendingCandidatesForJob, setPendingCandidatesForJob] = useState([]);
+  const [pendingCandidatesLoading, setPendingCandidatesLoading] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState("");
+  const [unscheduledOnly, setUnscheduledOnly] = useState(true);
+
+  const [examForm, setExamForm] = useState(initialExamForm);
+  const [trainingForm, setTrainingForm] = useState(initialTrainingForm);
+
+  const [scheduleDetailOpen, setScheduleDetailOpen] = useState(false);
+  const [resultDetailOpen, setResultDetailOpen] = useState(false);
+  const [sessionDetailMode, setSessionDetailMode] = useState("view");
+  const [selectedScheduleSessionKey, setSelectedScheduleSessionKey] = useState(null);
+  const [selectedResultSessionKey, setSelectedResultSessionKey] = useState(null);
+  const [scheduleSessionDetail, setScheduleSessionDetail] = useState(null);
+  const [resultSessionDetail, setResultSessionDetail] = useState(null);
+  const [sessionDateDraft, setSessionDateDraft] = useState("");
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionUpdating, setSessionUpdating] = useState(false);
+  const [rowLoadingId, setRowLoadingId] = useState(null);
+  const [bulkResultIds, setBulkResultIds] = useState([]);
+  const [bulkResultUpdating, setBulkResultUpdating] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_TRAINING_KEY, JSON.stringify(trainingRecords));
   }, [trainingRecords]);
 
-  useEffect(() => {
-    async function loadMasterData() {
-      setLoading(true);
-      try {
-        const [candRes, jobRes, kanbanRes] = await Promise.all([
-          recruitmentService.getCandidates({ page: 1, limit: 200 }),
-          jobOrderService.getJobOrders({ page: 1, limit: 200 }),
-          recruitmentService.getKanban({ limit_per_status: 50 }),
-        ]);
+  const loadMasterData = async () => {
+    setLoading(true);
+    try {
+      const [candRes, jobRes, kanbanRes, examRes, scheduleRes, resultRes] = await Promise.all([
+        recruitmentService.getCandidates({ page: 1, limit: 200 }),
+        jobOrderService.getJobOrders({ page: 1, limit: 200 }),
+        recruitmentService.getKanban({ limit_per_status: 50 }),
+        examApplicationService.getExamApplications({ page: 1, limit: 1200 }),
+        examApplicationService.getExamSessions({ view: "schedule" }),
+        examApplicationService.getExamSessions({ view: "result" })
+      ]);
 
-        setCandidates(candRes.data || []);
-        setJobOrders(jobRes.data || []);
-        setKanbanBoard(kanbanRes.data || []);
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
+      setCandidates(candRes.data || []);
+      setJobOrders(jobRes.data || []);
+      setKanbanBoard(kanbanRes.data || []);
+      setExamRecords(examRes.data || []);
+      setScheduleSessions(scheduleRes.data || []);
+      setResultSessions(resultRes.data || []);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPendingCandidatesByJobOrder = async (jobOrderId) => {
+    if (!jobOrderId) {
+      setPendingCandidatesForJob([]);
+      return;
     }
 
+    setPendingCandidatesLoading(true);
+    try {
+      const res = await examApplicationService.getPendingCandidatesByJobOrder(jobOrderId);
+      setPendingCandidatesForJob(res.data?.candidates || []);
+    } catch (err) {
+      setPendingCandidatesForJob([]);
+      toast.error(getErrorMessage(err));
+    } finally {
+      setPendingCandidatesLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadMasterData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const candidateMap = useMemo(() => {
@@ -113,27 +169,11 @@ function Module3Page() {
     return map;
   }, [candidates]);
 
-  const jobMap = useMemo(() => {
-    const map = new Map();
-    jobOrders.forEach((job) => map.set(String(job.id), job));
-    return map;
-  }, [jobOrders]);
-
-  const eligibleExamCandidates = useMemo(
-    () =>
-      candidates.filter(
-        (candidate) =>
-          candidate.status === "FORM_MATCHED_WAITING_EXAM" ||
-          candidate.status === "WAITING_FORM_MATCH"
-      ),
-    [candidates]
-  );
-
   const passedCandidates = useMemo(
     () =>
       examRecords
-        .filter((record) => record.resultStatus === "PASS")
-        .map((record) => candidateMap.get(String(record.candidateId)))
+        .filter((record) => record.result_status === "Pass")
+        .map((record) => candidateMap.get(String(record.candidate_id)))
         .filter(Boolean),
     [examRecords, candidateMap]
   );
@@ -145,7 +185,7 @@ function Module3Page() {
         return {
           key: status,
           title: CANDIDATE_STATUS_LABELS[status] || status,
-          items: matched?.items || [],
+          items: matched?.items || []
         };
       }),
     [kanbanBoard]
@@ -153,68 +193,300 @@ function Module3Page() {
 
   const resultStatusLabels = useMemo(
     () => ({
-      PENDING: t("module3.resultPending"),
-      PASS: t("module3.resultPass"),
-      RESERVE: t("module3.resultReserve"),
-      FAIL: t("module3.resultFail"),
+      Pending: t("module3.resultPending"),
+      Pass: t("module3.resultPass"),
+      Reserve: t("module3.resultReserve"),
+      Fail: t("module3.resultFail")
     }),
     [t]
   );
 
-  const loadMasterData = async () => {
-    setLoading(true);
-    try {
-      const [candRes, jobRes, kanbanRes] = await Promise.all([
-        recruitmentService.getCandidates({ page: 1, limit: 200 }),
-        jobOrderService.getJobOrders({ page: 1, limit: 200 }),
-        recruitmentService.getKanban({ limit_per_status: 50 }),
-      ]);
+  const pendingCountByJobOrder = useMemo(() => {
+    const map = new Map();
+    examRecords.forEach((record) => {
+      if (record.result_status !== "Pending") return;
+      const key = String(record.job_order_id);
+      map.set(key, Number(map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [examRecords]);
 
-      setCandidates(candRes.data || []);
-      setJobOrders(jobRes.data || []);
-      setKanbanBoard(kanbanRes.data || []);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
+  const schedulableJobOrders = useMemo(
+    () =>
+      jobOrders
+        .filter((job) => pendingCountByJobOrder.has(String(job.id)))
+        .map((job) => ({
+          ...job,
+          pending_count: pendingCountByJobOrder.get(String(job.id)) || 0
+        })),
+    [jobOrders, pendingCountByJobOrder]
+  );
+
+  const scheduleSummaryRows = useMemo(
+    () =>
+      scheduleSessions.map((session) => ({
+        ...session,
+        can_edit: Number(session.pending_candidates || 0) === Number(session.total_candidates || 0)
+      })),
+    [scheduleSessions]
+  );
+
+  const filteredPendingCandidates = useMemo(() => {
+    const keyword = String(pendingSearch || "").trim().toLowerCase();
+    return pendingCandidatesForJob.filter((row) => {
+      if (unscheduledOnly && row.exam_date) return false;
+      if (!keyword) return true;
+
+      const haystack = [
+        row.candidate_name,
+        row.candidate_citizen_id,
+        row.candidate_phone,
+        row.candidate_email
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(keyword);
+    });
+  }, [pendingCandidatesForJob, pendingSearch, unscheduledOnly]);
+
+  const selectablePendingCandidates = useMemo(
+    () => filteredPendingCandidates.filter((row) => !row.exam_date),
+    [filteredPendingCandidates]
+  );
+
+  const allSelectedOnCurrentJob =
+    selectablePendingCandidates.length > 0 &&
+    selectablePendingCandidates.every((row) => examForm.selectedExamAppIds.includes(row.id));
+
+  const pendingResultCandidateIds = useMemo(
+    () =>
+      (resultSessionDetail?.candidates || [])
+        .filter((row) => row.result_status === "Pending")
+        .map((row) => row.id),
+    [resultSessionDetail]
+  );
+
+  const allPendingResultsSelected =
+    pendingResultCandidateIds.length > 0 &&
+    pendingResultCandidateIds.every((id) => bulkResultIds.includes(id));
+
+  useEffect(() => {
+    const unscheduledIds = new Set(
+      pendingCandidatesForJob.filter((row) => !row.exam_date).map((row) => row.id)
+    );
+    setExamForm((prev) => ({
+      ...prev,
+      selectedExamAppIds: prev.selectedExamAppIds.filter((id) => unscheduledIds.has(id))
+    }));
+  }, [pendingCandidatesForJob]);
+
+  const handleExamJobOrderChange = async (jobOrderId) => {
+    setExamForm((prev) => ({
+      ...prev,
+      jobOrderId,
+      selectedExamAppIds: []
+    }));
+    setPendingSearch("");
+    await loadPendingCandidatesByJobOrder(jobOrderId);
   };
 
-  const updateRecordStatus = (recordId, resultStatus) => {
-    setExamRecords((prev) =>
-      prev.map((item) =>
-        item.id === recordId
-          ? { ...item, resultStatus, updatedAt: new Date().toISOString() }
-          : item
-      )
-    );
-
-    toast.success(
-      resultStatus === "FAIL" ? t("module3.noticeExamFailed") : t("module3.noticeExamUpdated")
-    );
+  const toggleExamAppSelection = (examAppId, checked) => {
+    setExamForm((prev) => {
+      const current = Array.isArray(prev.selectedExamAppIds) ? prev.selectedExamAppIds : [];
+      const next = checked ? [...new Set([...current, examAppId])] : current.filter((id) => id !== examAppId);
+      return { ...prev, selectedExamAppIds: next };
+    });
   };
 
-  const handleCreateExamRecord = (event) => {
+  const toggleSelectAllExamApps = (checked) => {
+    setExamForm((prev) => ({
+      ...prev,
+      selectedExamAppIds: checked ? selectablePendingCandidates.map((row) => row.id) : []
+    }));
+  };
+
+  const handleCreateExamRecord = async (event) => {
     event.preventDefault();
-    if (!examForm.candidateId || !examForm.jobOrderId || !examForm.examDate) {
-      toast.error(t("module3.noticeExamRequired"));
+
+    const allowedIds = new Set(
+      pendingCandidatesForJob.filter((row) => !row.exam_date).map((row) => row.id)
+    );
+    const validSelectedIds = examForm.selectedExamAppIds.filter((id) => allowedIds.has(id));
+
+    if (!examForm.jobOrderId || !examForm.examDate || !validSelectedIds.length) {
+      toast.error("Vui lòng chọn đơn hàng, ngày thi và ít nhất 1 ứng viên.");
       return;
     }
 
-    const newRecord = {
-      id: `EX-${Date.now()}`,
-      candidateId: examForm.candidateId,
-      jobOrderId: examForm.jobOrderId,
-      examDate: examForm.examDate,
-      note: examForm.note,
-      resultStatus: "PENDING",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      await examApplicationService.bulkScheduleSession({
+        job_order_id: Number(examForm.jobOrderId),
+        exam_application_ids: validSelectedIds,
+        exam_date: examForm.examDate
+      });
 
-    setExamRecords((prev) => [newRecord, ...prev]);
-    setExamForm(initialExamForm);
-    toast.success(t("module3.noticeExamAdded"));
+      setExamForm((prev) => ({ ...prev, selectedExamAppIds: [] }));
+      await Promise.all([loadMasterData(), loadPendingCandidatesByJobOrder(examForm.jobOrderId)]);
+      toast.success("Đã tạo/gộp ca thi cho danh sách ứng viên đã chọn.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const loadSessionDetail = async (sessionKey, target = "schedule") => {
+    setSessionLoading(true);
+    try {
+      const res = await examApplicationService.getExamSessionDetail(sessionKey);
+      if (target === "schedule") {
+        setScheduleSessionDetail(res.data || null);
+      } else {
+        setResultSessionDetail(res.data || null);
+      }
+      return res.data || null;
+    } finally {
+      setSessionLoading(false);
+    }
+  };
+
+  const handleOpenScheduleDetail = async (session, mode = "view") => {
+    setSessionDetailMode(mode);
+    setSelectedScheduleSessionKey(session.session_key);
+    try {
+      const detail = await loadSessionDetail(session.session_key, "schedule");
+      setSessionDateDraft(toDateTimeLocal(detail?.exam_date));
+      setScheduleDetailOpen(true);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenResultDetail = async (session) => {
+    setSelectedResultSessionKey(session.session_key);
+    setBulkResultIds([]);
+    try {
+      await loadSessionDetail(session.session_key, "result");
+      setResultDetailOpen(true);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleUpdateSessionDate = async () => {
+    if (!selectedScheduleSessionKey) return;
+    if (!sessionDateDraft) {
+      toast.error("Vui lòng chọn ngày giờ ca thi.");
+      return;
+    }
+
+    setSessionUpdating(true);
+    try {
+      await examApplicationService.updateExamSession(selectedScheduleSessionKey, {
+        exam_date: sessionDateDraft
+      });
+      await loadMasterData();
+      setScheduleDetailOpen(false);
+      setScheduleSessionDetail(null);
+      setSelectedScheduleSessionKey(null);
+      toast.success("Đã cập nhật thông tin ca thi.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSessionUpdating(false);
+    }
+  };
+
+  const handleRemoveCandidateFromSession = async (examApplicationId) => {
+    if (!selectedScheduleSessionKey) return;
+
+    setRowLoadingId(examApplicationId);
+    try {
+      await examApplicationService.deleteExamApplication(examApplicationId);
+      await loadMasterData();
+
+      const refreshed = await examApplicationService.getExamSessionDetail(selectedScheduleSessionKey);
+      setScheduleSessionDetail(refreshed.data || null);
+      toast.success("Đã xóa ứng viên khỏi ca thi.");
+    } catch (err) {
+      if (String(err?.response?.status || "") === "404") {
+        setScheduleDetailOpen(false);
+        setScheduleSessionDetail(null);
+        setSelectedScheduleSessionKey(null);
+        toast.success("Ca thi không còn ứng viên, đã được đóng.");
+      } else {
+        toast.error(getErrorMessage(err));
+      }
+    } finally {
+      setRowLoadingId(null);
+    }
+  };
+
+  const handleUpdateResultInSession = async (examApplicationId, resultStatus) => {
+    if (!selectedResultSessionKey) return;
+
+    setRowLoadingId(examApplicationId);
+    try {
+      await examApplicationService.updateExamResult(examApplicationId, {
+        result_status: resultStatus
+      });
+      await loadMasterData();
+      const refreshed = await examApplicationService.getExamSessionDetail(selectedResultSessionKey);
+      setResultSessionDetail(refreshed.data || null);
+      setBulkResultIds((prev) => prev.filter((id) => id !== examApplicationId));
+      toast.success(
+        resultStatus === "Fail" ? t("module3.noticeExamFailed") : t("module3.noticeExamUpdated")
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setRowLoadingId(null);
+    }
+  };
+
+  const toggleBulkResultSelection = (examApplicationId, checked) => {
+    setBulkResultIds((prev) => {
+      if (checked) {
+        return [...new Set([...prev, examApplicationId])];
+      }
+      return prev.filter((id) => id !== examApplicationId);
+    });
+  };
+
+  const toggleSelectAllPendingResults = (checked) => {
+    setBulkResultIds(checked ? [...pendingResultCandidateIds] : []);
+  };
+
+  const handleBulkUpdateResults = async (resultStatus) => {
+    if (!bulkResultIds.length) {
+      toast.error("Vui lòng chọn ít nhất 1 ứng viên chờ kết quả.");
+      return;
+    }
+
+    setBulkResultUpdating(true);
+    try {
+      await Promise.all(
+        bulkResultIds.map((examApplicationId) =>
+          examApplicationService.updateExamResult(examApplicationId, {
+            result_status: resultStatus
+          })
+        )
+      );
+
+      await loadMasterData();
+      const refreshed = await examApplicationService.getExamSessionDetail(selectedResultSessionKey);
+      setResultSessionDetail(refreshed.data || null);
+      setBulkResultIds([]);
+      toast.success(
+        resultStatus === "Fail"
+          ? "Đã cập nhật hàng loạt: Kho trượt."
+          : "Đã cập nhật hàng loạt: Đạt."
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBulkResultUpdating(false);
+    }
   };
 
   const handleCreateTrainingRecord = (event) => {
@@ -233,7 +505,7 @@ function Module3Page() {
       trainer: trainingForm.trainer,
       score: Number.isNaN(scoreNum) ? null : scoreNum,
       note: trainingForm.note,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
 
     setTrainingRecords((prev) => [newRecord, ...prev]);
@@ -245,7 +517,7 @@ function Module3Page() {
     { key: "exam-list", label: t("module3.tabExamList") },
     { key: "exam-result", label: t("module3.tabExamResult") },
     { key: "training", label: t("module3.tabTraining") },
-    { key: "kanban", label: t("module3.tabKanban") },
+    { key: "kanban", label: t("module3.tabKanban") }
   ];
 
   return (
@@ -293,15 +565,6 @@ function Module3Page() {
                         <span className="kanban-task__tag kanban-task__tag--source">
                           {candidate.source_name || "Chưa có nguồn"}
                         </span>
-                        <span
-                          className={`kanban-task__tag ${
-                            candidate.is_fee0_paid
-                              ? "kanban-task__tag--paid"
-                              : "kanban-task__tag--unpaid"
-                          }`}
-                        >
-                          {candidate.is_fee0_paid ? "Đã đóng phí 0" : "Chưa đóng phí 0"}
-                        </span>
                       </div>
 
                       <h5>{getCandidateLabel(candidate)}</h5>
@@ -313,21 +576,13 @@ function Module3Page() {
                       </div>
 
                       <div className="kanban-task__meta">
-                        <span
-                          className={`kanban-task__priority ${
-                            candidate.is_fee0_paid
-                              ? "kanban-task__priority--medium"
-                              : "kanban-task__priority--low"
-                          }`}
-                        >
-                          {candidate.is_fee0_paid ? "Fee0 OK" : "Fee0 Pending"}
+                        <span className="kanban-task__priority kanban-task__priority--low">
+                          {CANDIDATE_STATUS_LABELS[candidate.status] || candidate.status}
                         </span>
                         <span className="kanban-task__date">
                           {formatShortDate(candidate.updated_at, locale)}
                         </span>
-                        <span className="kanban-task__avatar">
-                          {getInitials(candidate.full_name)}
-                        </span>
+                        <span className="kanban-task__avatar">{getInitials(candidate.full_name)}</span>
                       </div>
                     </article>
                   ))}
@@ -346,97 +601,173 @@ function Module3Page() {
       {activeTab === "exam-list" ? (
         <div className="surface two-col">
           <div>
-            <SectionHeader title={t("module3.examAddTitle")} />
+            <SectionHeader title="Tạo ca thi hàng loạt" />
 
             <form className="grid-form" onSubmit={handleCreateExamRecord}>
-              <label>
-                {t("module3.candidate")}
-                <select
-                  value={examForm.candidateId}
-                  onChange={(e) =>
-                    setExamForm((prev) => ({ ...prev, candidateId: e.target.value }))
-                  }
-                >
-                  <option value="">{t("common.chooseCandidate")}</option>
-                  {eligibleExamCandidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {getCandidateLabel(candidate)} (
-                      {CANDIDATE_STATUS_LABELS[candidate.status] || candidate.status})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
+              <label className="field-span-2">
                 {t("module3.jobOrder")}
                 <select
                   value={examForm.jobOrderId}
-                  onChange={(e) =>
-                    setExamForm((prev) => ({ ...prev, jobOrderId: e.target.value }))
-                  }
+                  onChange={(e) => handleExamJobOrderChange(e.target.value)}
                 >
-                  <option value="">{t("common.chooseJobOrder")}</option>
-                  {jobOrders.map((job) => (
+                  <option value="">Chọn đơn hàng</option>
+                  {schedulableJobOrders.map((job) => (
                     <option key={job.id} value={job.id}>
-                      #{job.id} {job.job_title}
+                      #{job.id} {job.job_title} ({job.pending_count} ứng viên chờ)
                     </option>
                   ))}
                 </select>
               </label>
 
-              <label>
-                {t("module3.examDate")}
-                <input
-                  type="date"
-                  value={examForm.examDate}
-                  onChange={(e) =>
-                    setExamForm((prev) => ({ ...prev, examDate: e.target.value }))
-                  }
-                />
-              </label>
+              <div className="field-span-2">
+                <div className="inline-form" style={{ marginBottom: 8 }}>
+                  <input
+                    placeholder="Tìm nhanh theo tên / CCCD / SĐT / email"
+                    value={pendingSearch}
+                    onChange={(e) => setPendingSearch(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className={`btn small ${unscheduledOnly ? "" : "ghost"}`}
+                    onClick={() => setUnscheduledOnly((prev) => !prev)}
+                  >
+                    {unscheduledOnly ? "Đang lọc: Chưa có ngày thi" : "Hiện cả đã có ngày thi"}
+                  </button>
+                </div>
+
+                <div className="inline-form" style={{ marginBottom: 8 }}>
+                  <label className="inline-label">
+                    <input
+                      type="checkbox"
+                      checked={allSelectedOnCurrentJob}
+                      disabled={!selectablePendingCandidates.length}
+                      onChange={(e) => toggleSelectAllExamApps(e.target.checked)}
+                    />
+                    <span>Chọn tất cả ứng viên chưa có ngày thi</span>
+                  </label>
+                  <span className="tiny muted">
+                    Đã chọn {examForm.selectedExamAppIds.length}/{selectablePendingCandidates.length}
+                  </span>
+                </div>
+
+                <div className="table-wrap compact-table">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Ứng viên</th>
+                        <th>CCCD</th>
+                        <th>Liên hệ</th>
+                        <th>Trạng thái lịch thi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPendingCandidates.map((row) => (
+                        <tr key={row.id}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              disabled={Boolean(row.exam_date)}
+                              checked={examForm.selectedExamAppIds.includes(row.id)}
+                              onChange={(e) => toggleExamAppSelection(row.id, e.target.checked)}
+                            />
+                          </td>
+                          <td>{row.candidate_name || "-"}</td>
+                          <td>{row.candidate_citizen_id || "-"}</td>
+                          <td>{row.candidate_phone || row.candidate_email || "-"}</td>
+                          <td>
+                            {row.exam_date ? (
+                              <span className="tiny muted">Đã có ca: {formatDateTime(row.exam_date)}</span>
+                            ) : (
+                              <span className="tiny">Chưa có ngày thi</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {!filteredPendingCandidates.length ? (
+                        <tr>
+                          <td colSpan={5} className="center muted">
+                            {pendingCandidatesLoading
+                              ? "Đang tải ứng viên chờ..."
+                              : "Không có ứng viên theo bộ lọc hiện tại."}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
               <label className="field-span-2">
-                {t("common.note")}
+                {t("module3.examDate")}
                 <input
-                  value={examForm.note}
-                  onChange={(e) => setExamForm((prev) => ({ ...prev, note: e.target.value }))}
+                  type="datetime-local"
+                  value={examForm.examDate}
+                  onChange={(e) => setExamForm((prev) => ({ ...prev, examDate: e.target.value }))}
                 />
               </label>
 
               <button type="submit" className="btn field-span-2">
-                {t("module3.addToExamList")}
+                Tạo ca thi cho danh sách đã chọn
               </button>
             </form>
           </div>
 
           <div>
-            <SectionHeader title={t("module3.examScheduledTitle")} />
+            <SectionHeader title="Danh sách ca thi" />
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>{t("module3.candidate")}</th>
-                    <th>{t("module3.jobOrder")}</th>
-                    <th>{t("module3.examDate")}</th>
-                    <th>{t("common.status")}</th>
+                    <th>Ngày giờ ca thi</th>
+                    <th>Đơn hàng</th>
+                    <th>Đối tác</th>
+                    <th>Số ứng viên</th>
+                    <th>Đang chờ kết quả</th>
+                    <th>Đã có kết quả</th>
+                    <th>{t("common.action")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {examRecords.map((record) => (
-                    <tr key={record.id}>
-                      <td>{candidateMap.get(String(record.candidateId))?.full_name || "-"}</td>
-                      <td>{jobMap.get(String(record.jobOrderId))?.job_title || "-"}</td>
-                      <td>{formatDate(record.examDate)}</td>
+                  {scheduleSummaryRows.map((session) => (
+                    <tr key={session.session_key}>
+                      <td>{formatDateTime(session.exam_date)}</td>
+                      <td>{session.job_title || `#${session.job_order_id}`}</td>
+                      <td>{session.partner_name || "-"}</td>
+                      <td>{session.total_candidates}</td>
+                      <td>{session.pending_candidates}</td>
                       <td>
-                        <span className="badge">
-                          {resultStatusLabels[record.resultStatus] || record.resultStatus}
-                        </span>
+                        {Number(session.total_candidates || 0) - Number(session.pending_candidates || 0)}
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn small ghost"
+                            onClick={() => handleOpenScheduleDetail(session, "view")}
+                          >
+                            Chi tiết
+                          </button>
+                          <button
+                            type="button"
+                            className="btn small"
+                            disabled={!session.can_edit}
+                            onClick={() => handleOpenScheduleDetail(session, "edit")}
+                            title={
+                              session.can_edit
+                                ? "Sửa thông tin ca thi"
+                                : "Ca đã có kết quả, không thể sửa toàn ca"
+                            }
+                          >
+                            Sửa
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
-                  {!examRecords.length ? (
+                  {!scheduleSummaryRows.length ? (
                     <tr>
-                      <td colSpan={4} className="center muted">
+                      <td colSpan={7} className="center muted">
                         {t("common.noDataYet")}
                       </td>
                     </tr>
@@ -450,60 +781,46 @@ function Module3Page() {
 
       {activeTab === "exam-result" ? (
         <div className="surface">
-          <SectionHeader title={t("module3.examResultTitle")} />
+          <SectionHeader title="Kết quả thi theo ca" />
 
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>{t("module3.candidate")}</th>
-                  <th>{t("module3.jobOrder")}</th>
-                  <th>{t("module3.examDate")}</th>
-                  <th>{t("module3.currentResult")}</th>
+                  <th>Ngày giờ ca thi</th>
+                  <th>Đơn hàng</th>
+                  <th>Đối tác</th>
+                  <th>Tổng ứng viên</th>
+                  <th>Đạt</th>
+                  <th>Kho trượt</th>
+                  <th>Chờ xử lý</th>
                   <th>{t("common.action")}</th>
                 </tr>
               </thead>
               <tbody>
-                {examRecords.map((record) => (
-                  <tr key={record.id}>
-                    <td>{candidateMap.get(String(record.candidateId))?.full_name || "-"}</td>
-                    <td>{jobMap.get(String(record.jobOrderId))?.job_title || "-"}</td>
-                    <td>{formatDate(record.examDate)}</td>
+                {resultSessions.map((session) => (
+                  <tr key={session.session_key}>
+                    <td>{formatDateTime(session.exam_date)}</td>
+                    <td>{session.job_title || `#${session.job_order_id}`}</td>
+                    <td>{session.partner_name || "-"}</td>
+                    <td>{session.total_candidates}</td>
+                    <td>{session.passed_candidates}</td>
+                    <td>{session.failed_candidates}</td>
+                    <td>{session.pending_candidates}</td>
                     <td>
-                      <span className="badge">
-                        {resultStatusLabels[record.resultStatus] || record.resultStatus}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={() => updateRecordStatus(record.id, "PASS")}
-                        >
-                          {t("module3.pass")}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn small ghost"
-                          onClick={() => updateRecordStatus(record.id, "RESERVE")}
-                        >
-                          {t("module3.reserve")}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={() => updateRecordStatus(record.id, "FAIL")}
-                        >
-                          {t("module3.fail")}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="btn small"
+                        onClick={() => handleOpenResultDetail(session)}
+                      >
+                        Xem ứng viên
+                      </button>
                     </td>
                   </tr>
                 ))}
-                {!examRecords.length ? (
+                {!resultSessions.length ? (
                   <tr>
-                    <td colSpan={5} className="center muted">
+                    <td colSpan={8} className="center muted">
                       {t("common.noDataYet")}
                     </td>
                   </tr>
@@ -631,6 +948,250 @@ function Module3Page() {
           </div>
         </div>
       ) : null}
+
+      <DetailModal
+        open={scheduleDetailOpen}
+        title={
+          scheduleSessionDetail
+            ? `Chi tiết ca thi ${formatDateTime(scheduleSessionDetail.exam_date)}`
+            : "Chi tiết ca thi"
+        }
+        onClose={() => {
+          setScheduleDetailOpen(false);
+          setScheduleSessionDetail(null);
+          setSelectedScheduleSessionKey(null);
+          setSessionDateDraft("");
+        }}
+      >
+        {sessionLoading ? <p className="muted">Đang tải chi tiết ca thi...</p> : null}
+
+        {scheduleSessionDetail ? (
+          <>
+            <div className="stats-inline">
+              <div className="mini-stat">
+                <span>Đơn hàng</span>
+                <strong>{scheduleSessionDetail.job_title || `#${scheduleSessionDetail.job_order_id}`}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Đối tác</span>
+                <strong>{scheduleSessionDetail.partner_name || "-"}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Tổng ứng viên</span>
+                <strong>{scheduleSessionDetail.total_candidates}</strong>
+              </div>
+            </div>
+
+            {sessionDetailMode === "edit" ? (
+              <div className="grid-form" style={{ marginTop: 8 }}>
+                <label className="field-span-2">
+                  Ngày giờ ca thi
+                  <input
+                    type="datetime-local"
+                    value={sessionDateDraft}
+                    onChange={(e) => setSessionDateDraft(e.target.value)}
+                  />
+                </label>
+                <div className="field-span-2 row-actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleUpdateSessionDate}
+                    disabled={sessionUpdating}
+                  >
+                    {sessionUpdating ? "Đang cập nhật..." : "Lưu ca thi"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <SectionHeader title="Danh sách ứng viên trong ca" />
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Ứng viên</th>
+                    <th>CCCD</th>
+                    <th>Kết quả</th>
+                    {sessionDetailMode === "edit" ? <th>Thao tác</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduleSessionDetail.candidates.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.candidate_name || "-"}</td>
+                      <td>{row.candidate_citizen_id || "-"}</td>
+                      <td>
+                        <span className="badge">
+                          {resultStatusLabels[row.result_status] || row.result_status}
+                        </span>
+                      </td>
+                      {sessionDetailMode === "edit" ? (
+                        <td>
+                          <button
+                            type="button"
+                            className="btn text danger"
+                            disabled={row.result_status !== "Pending" || rowLoadingId === row.id}
+                            onClick={() => handleRemoveCandidateFromSession(row.id)}
+                            title={
+                              row.result_status === "Pending"
+                                ? "Xóa ứng viên khỏi ca thi"
+                                : "Ứng viên đã có kết quả, không thể xóa"
+                            }
+                          >
+                            {rowLoadingId === row.id ? "Đang xóa..." : "Xóa ứng viên"}
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                  {!scheduleSessionDetail.candidates.length ? (
+                    <tr>
+                      <td
+                        colSpan={sessionDetailMode === "edit" ? 4 : 3}
+                        className="center muted"
+                      >
+                        Không có ứng viên trong ca thi.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+      </DetailModal>
+
+      <DetailModal
+        open={resultDetailOpen}
+        title={
+          resultSessionDetail
+            ? `Kết quả ca thi ${formatDateTime(resultSessionDetail.exam_date)}`
+            : "Kết quả ca thi"
+        }
+        onClose={() => {
+          setResultDetailOpen(false);
+          setResultSessionDetail(null);
+          setSelectedResultSessionKey(null);
+          setBulkResultIds([]);
+        }}
+      >
+        {sessionLoading ? <p className="muted">Đang tải danh sách ứng viên...</p> : null}
+
+        {resultSessionDetail ? (
+          <>
+            <div className="stats-inline">
+              <div className="mini-stat">
+                <span>Đơn hàng</span>
+                <strong>{resultSessionDetail.job_title || `#${resultSessionDetail.job_order_id}`}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Đạt</span>
+                <strong>{resultSessionDetail.passed_candidates}</strong>
+              </div>
+              <div className="mini-stat">
+                <span>Kho trượt</span>
+                <strong>{resultSessionDetail.failed_candidates}</strong>
+              </div>
+            </div>
+
+            <div className="inline-form" style={{ marginBottom: 8 }}>
+              <label className="inline-label">
+                <input
+                  type="checkbox"
+                  checked={allPendingResultsSelected}
+                  disabled={!pendingResultCandidateIds.length || bulkResultUpdating}
+                  onChange={(e) => toggleSelectAllPendingResults(e.target.checked)}
+                />
+                <span>Chọn tất cả ứng viên đang chờ</span>
+              </label>
+              <button
+                type="button"
+                className="btn small"
+                disabled={!bulkResultIds.length || bulkResultUpdating}
+                onClick={() => handleBulkUpdateResults("Pass")}
+              >
+                Đỗ hàng loạt
+              </button>
+              <button
+                type="button"
+                className="btn small"
+                disabled={!bulkResultIds.length || bulkResultUpdating}
+                onClick={() => handleBulkUpdateResults("Fail")}
+              >
+                Trượt hàng loạt
+              </button>
+              <span className="tiny muted">Đã chọn {bulkResultIds.length}</span>
+            </div>
+
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Ứng viên</th>
+                    <th>CCCD</th>
+                    <th>Kết quả hiện tại</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultSessionDetail.candidates.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          disabled={row.result_status !== "Pending" || bulkResultUpdating}
+                          checked={bulkResultIds.includes(row.id)}
+                          onChange={(e) => toggleBulkResultSelection(row.id, e.target.checked)}
+                        />
+                      </td>
+                      <td>{row.candidate_name || "-"}</td>
+                      <td>{row.candidate_citizen_id || "-"}</td>
+                      <td>
+                        <span className="badge">
+                          {resultStatusLabels[row.result_status] || row.result_status}
+                        </span>
+                      </td>
+                      <td>
+                        {row.result_status === "Pending" ? (
+                          <div className="row-actions">
+                            <button
+                              type="button"
+                              className="btn small"
+                              disabled={rowLoadingId === row.id}
+                              onClick={() => handleUpdateResultInSession(row.id, "Pass")}
+                            >
+                              {t("module3.pass")}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn small"
+                              disabled={rowLoadingId === row.id}
+                              onClick={() => handleUpdateResultInSession(row.id, "Fail")}
+                            >
+                              {t("module3.fail")}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="tiny muted">Đã chốt kết quả</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!resultSessionDetail.candidates.length ? (
+                    <tr>
+                      <td colSpan={5} className="center muted">
+                        Không có ứng viên trong ca thi.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+      </DetailModal>
     </section>
   );
 }
