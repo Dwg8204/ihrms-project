@@ -96,56 +96,48 @@ function Sidebar() {
   const menuSections = useMemo(
     () => [
       {
-        label: "Danh mục module",
+        label: "Nghiệp vụ chính",
         items: [
           {
-            label: "M1. Quản lý Tuyển dụng & Nguồn ứng viên",
+            label: "Dashboard",
+            icon: SquareGridIcon,
+            to: "/",
+          },
+          {
+            label: "Tuyển dụng",
             icon: HandshakeIcon,
             to: "/module-1",
           },
           {
-            label: "M2. Quản lý Đối tác & Đơn hàng việc làm",
+            label: "Đối tác & Đơn hàng",
             icon: StoreIcon,
             to: "/module-2",
           },
           {
-            label: "M3. Quản lý Thông tin Đào tạo & Thi tuyển",
+            label: "Lịch thi & Đào tạo",
             icon: RocketIcon,
             to: "/module-3",
           },
           {
-            label: "M4. Quản lý Hợp đồng & Cam kết dịch vụ",
+            label: "Hợp đồng dịch vụ",
             icon: SquareGridIcon,
             to: "/module-4",
           },
           {
-            label: "M5. Quản lý Tài chính & Phí dịch vụ",
+            label: "Tài chính dịch vụ",
             icon: BarChartIcon,
             to: "/module-5",
           },
           {
-            label: "M6. Quản lý Hồ sơ & Thủ tục xuất cảnh",
+            label: "Hồ sơ xuất cảnh",
             icon: TrendIcon,
             to: "/module-6",
           },
           {
-            label: "M7. Quản lý Thông tin Lao động tại nước ngoài",
+            label: "Lao động tại Nhật",
             icon: MailIcon,
             to: "/module-7",
           },
-          {
-            label: "M8. Báo cáo & MIS Dashboard",
-            icon: SquareGridIcon,
-            to: "/",
-          },
-        ],
-      },
-      {
-        label: "Nhóm dữ liệu",
-        items: [
-          { label: "Nhóm 1. Ứng viên đi Nhật / Học viên", icon: HandshakeIcon, to: "/module-1" },
-          { label: "Nhóm 2. Nhân viên", icon: SquareGridIcon, to: "/module-5" },
-          { label: "Nhóm 3. Lớp học", icon: RocketIcon, to: "/module-3" },
         ],
       },
       {

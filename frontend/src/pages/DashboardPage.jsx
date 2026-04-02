@@ -6,35 +6,21 @@ import StatCard from "../components/StatCard";
 import BarChart from "../components/BarChart";
 import { recruitmentService } from "../services/recruitmentService";
 import { documentService } from "../services/documentService";
-import { formatDate } from "../utils/format";
+import { examApplicationService } from "../services/examApplicationService";
+import { CANDIDATE_STATUS_LABELS } from "../utils/constants";
+import { formatDate, formatDateTime } from "../utils/format";
 import { getErrorMessage } from "../utils/toast";
 import { useI18n } from "../i18n/I18nProvider";
 
-function getDebtAgingBuckets(candidates) {
-  const buckets = {
-    "0-30": 0,
-    "31-60": 0,
-    "61-90": 0,
-    "90+": 0,
-  };
-
+function countNewCandidatesThisMonth(candidates) {
   const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  candidates.forEach((candidate) => {
-    if (candidate.is_fee0_paid) return;
-    if (!candidate.created_at) return;
-
-    const created = new Date(candidate.created_at);
-    if (Number.isNaN(created.getTime())) return;
-
-    const days = Math.floor((now - created) / (1000 * 60 * 60 * 24));
-    if (days <= 30) buckets["0-30"] += 1;
-    else if (days <= 60) buckets["31-60"] += 1;
-    else if (days <= 90) buckets["61-90"] += 1;
-    else buckets["90+"] += 1;
-  });
-
-  return Object.entries(buckets).map(([bucket, total]) => ({ bucket, total }));
+  return candidates.filter((candidate) => {
+    const createdAt = new Date(candidate.created_at);
+    if (Number.isNaN(createdAt.getTime())) return false;
+    return createdAt >= start;
+  }).length;
 }
 
 function DashboardPage() {
@@ -47,6 +33,8 @@ function DashboardPage() {
   const [healthAlerts, setHealthAlerts] = useState([]);
   const [visaAlerts, setVisaAlerts] = useState([]);
   const [candidates, setCandidates] = useState([]);
+  const [examApplications, setExamApplications] = useState([]);
+  const [examSessions, setExamSessions] = useState([]);
 
   useEffect(() => {
     let alive = true;
@@ -54,11 +42,13 @@ function DashboardPage() {
     async function run() {
       setLoading(true);
       try {
-        const [funnelRes, healthRes, visaRes, candidateRes] = await Promise.all([
+        const [funnelRes, healthRes, visaRes, candidateRes, examAppRes, examSessionRes] = await Promise.all([
           recruitmentService.getFunnelSummary(),
           documentService.getHealthExpiryAlerts(30),
           documentService.getVisaDelayAlerts(),
           recruitmentService.getCandidates({ page: 1, limit: 300 }),
+          examApplicationService.getExamApplications({ page: 1, limit: 1200 }),
+          examApplicationService.getExamSessions({ view: "schedule" })
         ]);
 
         if (!alive) return;
@@ -66,6 +56,8 @@ function DashboardPage() {
         setHealthAlerts(healthRes?.data || []);
         setVisaAlerts(visaRes?.data || []);
         setCandidates(candidateRes?.data || []);
+        setExamApplications(examAppRes?.data || []);
+        setExamSessions(examSessionRes?.data || []);
       } catch (err) {
         if (!alive) return;
         toast.error(getErrorMessage(err));
@@ -95,18 +87,12 @@ function DashboardPage() {
     return rows[0];
   }, [summary.by_source]);
 
-  const recruitmentBars = useMemo(
-    () =>
-      (summary.by_source || []).slice(0, 8).map((item) => ({
-        source: item.source_name,
-        conversion: Number(item.conversion_pct || 0),
-      })),
-    [summary.by_source]
+  const newCandidatesThisMonth = useMemo(
+    () => countNewCandidatesThisMonth(candidates),
+    [candidates]
   );
 
-  const debtAgingBars = useMemo(() => getDebtAgingBuckets(candidates), [candidates]);
-
-  const funnelStatusMap = useMemo(() => {
+  const statusMap = useMemo(() => {
     const map = new Map();
     (summary.by_status || []).forEach((row) => {
       map.set(row.status, Number(row.total || 0));
@@ -114,15 +100,77 @@ function DashboardPage() {
     return map;
   }, [summary.by_status]);
 
+  const waitingFormCount = statusMap.get("WAITING_FORM_MATCH") || 0;
+  const waitingExamCount = statusMap.get("FORM_MATCHED_WAITING_EXAM") || 0;
+  const passedCount = statusMap.get("PASSED") || 0;
+
+  const pendingExamCount = useMemo(
+    () => examApplications.filter((row) => row.result_status === "Pending").length,
+    [examApplications]
+  );
+
+  const unscheduledExamCount = useMemo(
+    () =>
+      examApplications.filter((row) => row.result_status === "Pending" && !row.exam_date).length,
+    [examApplications]
+  );
+
+  const examResultBars = useMemo(() => {
+    const counters = {
+      Pending: 0,
+      Pass: 0,
+      Reserve: 0,
+      Fail: 0,
+    };
+
+    examApplications.forEach((row) => {
+      if (counters[row.result_status] !== undefined) {
+        counters[row.result_status] += 1;
+      }
+    });
+
+    return [
+      { status: t("module3.resultPending"), total: counters.Pending },
+      { status: t("module3.resultPass"), total: counters.Pass },
+      { status: t("module3.resultReserve"), total: counters.Reserve },
+      { status: t("module3.resultFail"), total: counters.Fail },
+    ];
+  }, [examApplications, t]);
+
+  const candidateStatusBars = useMemo(
+    () =>
+      (summary.by_status || []).map((row) => ({
+        stage: CANDIDATE_STATUS_LABELS[row.status] || row.status,
+        total: Number(row.total || 0),
+      })),
+    [summary.by_status]
+  );
+
+  const upcomingSessionRows = useMemo(() => {
+    const now = new Date();
+    return [...examSessions]
+      .filter((row) => {
+        const examDate = new Date(row.exam_date);
+        if (Number.isNaN(examDate.getTime())) return false;
+        return examDate >= now;
+      })
+      .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date))
+      .slice(0, 8);
+  }, [examSessions]);
+
   const operationBottleneckBars = useMemo(
     () => [
       {
         stage: t("dashboard.stageWaitingForm"),
-        total: funnelStatusMap.get("WAITING_FORM_MATCH") || 0,
+        total: waitingFormCount,
       },
       {
         stage: t("dashboard.stageWaitingExam"),
-        total: funnelStatusMap.get("FORM_MATCHED_WAITING_EXAM") || 0,
+        total: waitingExamCount,
+      },
+      {
+        stage: "Chưa xếp lịch thi",
+        total: unscheduledExamCount,
       },
       {
         stage: t("dashboard.stageHealthExpiry"),
@@ -133,7 +181,7 @@ function DashboardPage() {
         total: visaAlerts.length,
       },
     ],
-    [funnelStatusMap, healthAlerts.length, t, visaAlerts.length]
+    [healthAlerts.length, t, visaAlerts.length, waitingExamCount, waitingFormCount, unscheduledExamCount]
   );
 
   const tabs = [
@@ -158,21 +206,27 @@ function DashboardPage() {
           />
           <StatCard
             label={t("dashboard.statsTopSource")}
-            value={topSource?.source_name || "-"}
-            hint={topSource ? `${topSource.conversion_pct || 0}%` : ""}
+            value={newCandidatesThisMonth}
+            hint="Tháng hiện tại"
             tone="sun"
           />
           <StatCard
             label={t("dashboard.statsHealthAlerts")}
-            value={healthAlerts.length}
-            hint=""
-            tone={healthAlerts.length > 0 ? "alert" : "mint"}
+            value={waitingExamCount}
+            hint={`${pendingExamCount} phiếu thi đang chờ`}
+            tone={waitingExamCount > 0 ? "alert" : "mint"}
           />
           <StatCard
             label={t("dashboard.statsVisaAlerts")}
-            value={visaAlerts.length}
-            hint=""
-            tone={visaAlerts.length > 0 ? "alert" : "mint"}
+            value={healthAlerts.length + visaAlerts.length}
+            hint={`${healthAlerts.length} sức khỏe, ${visaAlerts.length} visa`}
+            tone={healthAlerts.length + visaAlerts.length > 0 ? "alert" : "mint"}
+          />
+          <StatCard
+            label="Ứng viên đã đạt"
+            value={passedCount}
+            hint={topSource ? `Nguồn tốt nhất: ${topSource.source_name}` : ""}
+            tone="ocean"
           />
         </div>
       </div>
@@ -185,10 +239,9 @@ function DashboardPage() {
           <div className="chart-surface">
             <h4>{t("dashboard.chartRecruitment")}</h4>
             <BarChart
-              rows={recruitmentBars}
-              valueKey="conversion"
-              labelKey="source"
-              suffix="%"
+              rows={candidateStatusBars}
+              valueKey="total"
+              labelKey="stage"
               color="teal"
             />
           </div>
@@ -197,7 +250,7 @@ function DashboardPage() {
         {activeTab === "finance" ? (
           <div className="chart-surface">
             <h4>{t("dashboard.chartFinance")}</h4>
-            <BarChart rows={debtAgingBars} valueKey="total" labelKey="bucket" color="sun" />
+            <BarChart rows={examResultBars} valueKey="total" labelKey="status" color="sun" />
           </div>
         ) : null}
 
@@ -258,24 +311,24 @@ function DashboardPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>{t("dashboard.colCandidate")}</th>
                   <th>{t("dashboard.colExpectedDate")}</th>
+                  <th>{t("common.jobOrder")}</th>
                   <th>{t("dashboard.colOverdue")}</th>
                 </tr>
               </thead>
               <tbody>
-                {visaAlerts.map((row) => (
-                  <tr key={`${row.candidate_id}-${row.expected_complete_date}`}>
-                    <td>{`${row.citizen_id || "-"} - ${row.full_name}`}</td>
-                    <td>{formatDate(row.expected_complete_date)}</td>
+                {upcomingSessionRows.map((row) => (
+                  <tr key={row.session_key}>
+                    <td>{formatDateTime(row.exam_date)}</td>
+                    <td>{row.job_title || `#${row.job_order_id}`}</td>
                     <td>
-                      <span className="badge danger">
-                        {row.overdue_days} {t("dashboard.overdueDays")}
+                      <span className="badge warn">
+                        {row.pending_candidates} chờ xử lý
                       </span>
                     </td>
                   </tr>
                 ))}
-                {!visaAlerts.length ? (
+                {!upcomingSessionRows.length ? (
                   <tr>
                     <td colSpan={3} className="muted center">
                       {t("dashboard.noAlerts")}
