@@ -8,6 +8,7 @@ import { educationLevelService } from '../services/educationLevelService';
 import { jobOrderService } from '../services/jobOrderService';
 import { examApplicationService } from '../services/examApplicationService';
 import { documentService } from '../services/documentService';
+import { emailService } from '../services/emailService';
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from '../utils/constants';
 import { formatDate, formatDateTime } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
@@ -118,6 +119,11 @@ function RecruitmentPage() {
   const [summary, setSummary] = useState({ by_status: [], by_source: [] });
   const [jobOrders, setJobOrders] = useState([]);
   const [examApplications, setExamApplications] = useState([]);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [manualSendModalOpen, setManualSendModalOpen] = useState(false);
+  const [manualTemplateId, setManualTemplateId] = useState('');
+  const [manualSending, setManualSending] = useState(false);
 
   const [candidateDetail, setCandidateDetail] = useState(null);
   const [detailReadiness, setDetailReadiness] = useState(emptyReadiness);
@@ -156,6 +162,16 @@ function RecruitmentPage() {
     });
     return map;
   }, [examApplications]);
+
+  const selectableCandidateIds = useMemo(
+    () => candidates.map((candidate) => Number(candidate.id)),
+    [candidates]
+  );
+
+  const allOnPageSelected = useMemo(() => {
+    if (!selectableCandidateIds.length) return false;
+    return selectableCandidateIds.every((id) => selectedCandidateIds.includes(id));
+  }, [selectableCandidateIds, selectedCandidateIds]);
 
   const showError = (err) => {
     toast.error(getErrorMessage(err));
@@ -203,7 +219,12 @@ function RecruitmentPage() {
     if (filters.source_id) params.source_id = filters.source_id;
 
     const res = await recruitmentService.getCandidates(params);
-    setCandidates(res.data || []);
+    const nextCandidates = res.data || [];
+    setCandidates(nextCandidates);
+    setSelectedCandidateIds((prev) => {
+      const availableIds = new Set(nextCandidates.map((item) => Number(item.id)));
+      return prev.filter((id) => availableIds.has(Number(id)));
+    });
   };
 
   const loadEducationLevels = async () => {
@@ -233,6 +254,11 @@ function RecruitmentPage() {
     setExamApplications(res.data || []);
   };
 
+  const loadEmailTemplates = async () => {
+    const res = await emailService.getTemplates({ page: 1, limit: 200 });
+    setEmailTemplates(res.data || []);
+  };
+
   const reloadAll = async () => {
     setLoading(true);
     try {
@@ -243,7 +269,8 @@ function RecruitmentPage() {
         loadKanban(),
         loadSummary(),
         loadJobOrders(),
-        loadExamApplications()
+        loadExamApplications(),
+        loadEmailTemplates()
       ]);
     } catch (err) {
       showError(err);
@@ -465,6 +492,73 @@ function RecruitmentPage() {
       showSuccess('Đã cập nhật trạng thái ứng viên.');
     } catch (err) {
       showError(err);
+    }
+  };
+
+  const toggleCandidateSelection = (candidateId) => {
+    const normalizedId = Number(candidateId);
+    setSelectedCandidateIds((prev) => {
+      if (prev.includes(normalizedId)) {
+        return prev.filter((id) => id !== normalizedId);
+      }
+      return [...prev, normalizedId];
+    });
+  };
+
+  const toggleSelectAllCandidates = () => {
+    if (allOnPageSelected) {
+      setSelectedCandidateIds((prev) =>
+        prev.filter((id) => !selectableCandidateIds.includes(Number(id)))
+      );
+      return;
+    }
+
+    setSelectedCandidateIds((prev) => {
+      const merged = new Set([...prev, ...selectableCandidateIds]);
+      return Array.from(merged);
+    });
+  };
+
+  const openManualSendModal = () => {
+    if (!selectedCandidateIds.length) {
+      toast.error('Vui lòng chọn ít nhất 1 ứng viên để gửi email.');
+      return;
+    }
+
+    setManualSendModalOpen(true);
+  };
+
+  const closeManualSendModal = () => {
+    setManualSendModalOpen(false);
+    setManualTemplateId('');
+  };
+
+  const handleManualSend = async () => {
+    if (!manualTemplateId) {
+      toast.error('Vui lòng chọn mẫu email.');
+      return;
+    }
+
+    if (!selectedCandidateIds.length) {
+      toast.error('Danh sách ứng viên gửi đang trống.');
+      return;
+    }
+
+    try {
+      setManualSending(true);
+      const res = await emailService.sendManual({
+        template_id: Number(manualTemplateId),
+        candidate_ids: selectedCandidateIds
+      });
+
+      const sent = res?.data?.sent ?? 0;
+      const failed = res?.data?.failed ?? 0;
+      showSuccess(`Đã xử lý gửi email: ${sent} thành công, ${failed} thất bại.`);
+      closeManualSendModal();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setManualSending(false);
     }
   };
 
@@ -759,6 +853,12 @@ function RecruitmentPage() {
         <div className="surface">
           <SectionHeader title="Danh sách ứng viên và source tracking" />
 
+          <div className="row-actions" style={{ marginBottom: 12 }}>
+            <button type="button" className="btn" onClick={openManualSendModal}>
+              Gửi Email ({selectedCandidateIds.length})
+            </button>
+          </div>
+
           <div className="filter-row">
             <input
               placeholder="Tìm theo CCCD, tên, điện thoại, email"
@@ -796,6 +896,13 @@ function RecruitmentPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleSelectAllCandidates}
+                    />
+                  </th>
                   <th>CCCD</th>
                   <th>Ứng viên</th>
                   <th>Nguồn</th>
@@ -812,6 +919,13 @@ function RecruitmentPage() {
 
                   return (
                     <tr key={row.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedCandidateIds.includes(Number(row.id))}
+                          onChange={() => toggleCandidateSelection(row.id)}
+                        />
+                      </td>
                       <td>{row.citizen_id || '-'}</td>
                       <td>
                         <strong>{row.full_name}</strong>
@@ -933,7 +1047,7 @@ function RecruitmentPage() {
                 })}
                 {!candidates.length ? (
                   <tr>
-                    <td colSpan={7} className="muted center">
+                    <td colSpan={8} className="muted center">
                       Không có ứng viên.
                     </td>
                   </tr>
@@ -1095,6 +1209,39 @@ function RecruitmentPage() {
           </div>
         </>
       ) : null}
+
+      <DetailModal
+        open={manualSendModalOpen}
+        title={`Gửi email thủ công (${selectedCandidateIds.length} ứng viên)`}
+        onClose={closeManualSendModal}
+        footer={
+          <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
+            <button type="button" className="btn ghost" onClick={closeManualSendModal}>
+              Hủy
+            </button>
+            <button type="button" className="btn" onClick={handleManualSend} disabled={manualSending}>
+              {manualSending ? 'Đang gửi...' : 'Xác nhận gửi'}
+            </button>
+          </div>
+        }
+      >
+        <div className="grid-form">
+          <label className="field-span-2">
+            Chọn mẫu email
+            <select value={manualTemplateId} onChange={(e) => setManualTemplateId(e.target.value)}>
+              <option value="">Chọn mẫu</option>
+              {emailTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.template_code} - {template.subject}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="muted" style={{ marginTop: 10 }}>
+          Hệ thống sẽ gửi theo email hiện có của từng ứng viên và tự lưu lịch sử SENT/FAILED.
+        </p>
+      </DetailModal>
 
       <DetailModal
         open={detailModalOpen && Boolean(candidateDetail)}

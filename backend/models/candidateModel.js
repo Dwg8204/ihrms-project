@@ -316,8 +316,14 @@ const Candidate = {
 
       case CANDIDATE_STATUSES.PASSED:
       case CANDIDATE_STATUSES.FAILED_POOL:
-        if (currentStatus !== CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM) {
-          throw new Error(`Candidate must be in ${CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM} status to update exam result.`);
+        if (
+          currentStatus !== CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM &&
+          currentStatus !== CANDIDATE_STATUSES.PASSED &&
+          currentStatus !== CANDIDATE_STATUSES.FAILED_POOL
+        ) {
+          throw new Error(
+            `Candidate must be in ${CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM}, ${CANDIDATE_STATUSES.PASSED}, or ${CANDIDATE_STATUSES.FAILED_POOL} status to update exam result.`
+          );
         }
         // Kiểm tra bổ sung: Đảm bảo có đơn đăng ký thi (exam_application) và mã đơn đặt hàng công việc (job_order_id) cho ứng viên này
         if (!jobOrderId) {

@@ -272,13 +272,13 @@ class ExamApplication {
             throw new Error('Invalid result status.');
         }
 
-        // Kiểm tra xem đơn đăng ký thi có tồn tại và đang ở trạng thái PENDING hay không
+        // Kiểm tra xem đơn đăng ký thi có tồn tại hay không
         const currentExamApp = await this.findById(id);
         if (!currentExamApp) {
             throw new Error('Exam application not found.');
         }
-        if (currentExamApp.result_status !== EXAM_RESULT_STATUSES.PENDING) {
-            throw new Error(`Exam result already updated to ${currentExamApp.result_status}.`);
+        if (currentExamApp.result_status === result_status) {
+            throw new Error(`Exam result is already ${result_status}.`);
         }
 
         let scoreDetailsJson = null;

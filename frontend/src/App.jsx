@@ -8,6 +8,7 @@ import Module3Page from "./pages/Module3Page";
 import DocumentsPage from "./pages/DocumentsPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import ChatPage from "./pages/ChatPage";
+import EmailPage from "./pages/EmailPage";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "./i18n/I18nProvider";
 
@@ -106,7 +107,7 @@ function App() {
         <Route path="/module-5" element={<RoadmapPage />} />
         <Route path="/module-6" element={<DocumentsPage />} />
         <Route path="/module-7" element={<RoadmapPage />} />
-        <Route path="/mail" element={<ChatPage />} />
+        <Route path="/mail" element={<EmailPage />} />
         <Route path="/wizard" element={<ChatPage />} />
         <Route path="/roadmap" element={<RoadmapPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />

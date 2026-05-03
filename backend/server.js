@@ -11,9 +11,11 @@ const jobOrderRoutes = require('./routes/jobOrderRoutes');
 const examApplicationRoutes = require('./routes/examApplicationRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const educationLevelRoutes = require('./routes/educationLevelRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const cron = require('node-cron');
 const JobOrder = require('./models/jobOrderModel');
+const { ensureEmailSchema } = require('./database/emailSchema');
 
 const app = express();
 
@@ -36,6 +38,11 @@ app.use('/api/job-orders', jobOrderRoutes);
 app.use('/api/exam-applications', examApplicationRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/education-levels', educationLevelRoutes);
+app.use('/api/emails', emailRoutes);
+
+ensureEmailSchema().catch((error) => {
+  console.error('Cannot initialize email schema:', error.message);
+});
 
 cron.schedule('0 0 * * *', async () => {
     console.log('Running daily cron job for job orders...');

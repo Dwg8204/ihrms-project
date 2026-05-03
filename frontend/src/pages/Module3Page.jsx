@@ -87,7 +87,7 @@ function Module3Page() {
   const [trainingRecords, setTrainingRecords] = useState(() =>
     safeLoadArray(STORAGE_TRAINING_KEY)
   );
-  const [kanbanBoard, setKanbanBoard] = useState([]);
+
 
   const [pendingCandidatesForJob, setPendingCandidatesForJob] = useState([]);
   const [pendingCandidatesLoading, setPendingCandidatesLoading] = useState(false);
@@ -118,10 +118,9 @@ function Module3Page() {
   const loadMasterData = async () => {
     setLoading(true);
     try {
-      const [candRes, jobRes, kanbanRes, examRes, scheduleRes, resultRes] = await Promise.all([
+      const [candRes, jobRes, examRes, scheduleRes, resultRes] = await Promise.all([
         recruitmentService.getCandidates({ page: 1, limit: 200 }),
         jobOrderService.getJobOrders({ page: 1, limit: 200 }),
-        recruitmentService.getKanban({ limit_per_status: 50 }),
         examApplicationService.getExamApplications({ page: 1, limit: 1200 }),
         examApplicationService.getExamSessions({ view: "schedule" }),
         examApplicationService.getExamSessions({ view: "result" })
@@ -129,7 +128,6 @@ function Module3Page() {
 
       setCandidates(candRes.data || []);
       setJobOrders(jobRes.data || []);
-      setKanbanBoard(kanbanRes.data || []);
       setExamRecords(examRes.data || []);
       setScheduleSessions(scheduleRes.data || []);
       setResultSessions(resultRes.data || []);
@@ -176,19 +174,6 @@ function Module3Page() {
         .map((record) => candidateMap.get(String(record.candidate_id)))
         .filter(Boolean),
     [examRecords, candidateMap]
-  );
-
-  const kanbanByColumn = useMemo(
-    () =>
-      CANDIDATE_STATUSES.map((status) => {
-        const matched = kanbanBoard.find((column) => column.status === status);
-        return {
-          key: status,
-          title: CANDIDATE_STATUS_LABELS[status] || status,
-          items: matched?.items || []
-        };
-      }),
-    [kanbanBoard]
   );
 
   const resultStatusLabels = useMemo(
@@ -268,9 +253,14 @@ function Module3Page() {
     [resultSessionDetail]
   );
 
+  const allResultCandidateIds = useMemo(
+    () => (resultSessionDetail?.candidates || []).map((row) => row.id),
+    [resultSessionDetail]
+  );
+
   const allPendingResultsSelected =
-    pendingResultCandidateIds.length > 0 &&
-    pendingResultCandidateIds.every((id) => bulkResultIds.includes(id));
+    allResultCandidateIds.length > 0 &&
+    allResultCandidateIds.every((id) => bulkResultIds.includes(id));
 
   useEffect(() => {
     const unscheduledIds = new Set(
@@ -454,7 +444,7 @@ function Module3Page() {
   };
 
   const toggleSelectAllPendingResults = (checked) => {
-    setBulkResultIds(checked ? [...pendingResultCandidateIds] : []);
+    setBulkResultIds(checked ? [...allResultCandidateIds] : []);
   };
 
   const handleBulkUpdateResults = async (resultStatus) => {
@@ -517,7 +507,7 @@ function Module3Page() {
     { key: "exam-list", label: t("module3.tabExamList") },
     { key: "exam-result", label: t("module3.tabExamResult") },
     { key: "training", label: t("module3.tabTraining") },
-    { key: "kanban", label: t("module3.tabKanban") }
+
   ];
 
   return (
@@ -537,66 +527,6 @@ function Module3Page() {
 
         <SegmentTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
-
-      {activeTab === "kanban" ? (
-        <div className="kanban-shell">
-          <SectionHeader
-            title={t("module3.kanbanTitle")}
-            subtitle={t("module3.kanbanSubtitle")}
-            action={
-              <button type="button" className="kanban-toolbar__button" onClick={loadMasterData}>
-                {t("common.refresh")}
-              </button>
-            }
-          />
-
-          <div className="kanban-board-modern">
-            {kanbanByColumn.map((column) => (
-              <section key={column.key} className="kanban-column-modern">
-                <div className="kanban-column-modern__head">
-                  <h4>{column.title}</h4>
-                  <span>{column.items.length}</span>
-                </div>
-
-                <div className="kanban-column-modern__list">
-                  {column.items.map((candidate) => (
-                    <article key={candidate.id} className="kanban-task">
-                      <div className="kanban-task__tags">
-                        <span className="kanban-task__tag kanban-task__tag--source">
-                          {candidate.source_name || "Chưa có nguồn"}
-                        </span>
-                      </div>
-
-                      <h5>{getCandidateLabel(candidate)}</h5>
-                      <p>{candidate.phone || candidate.email || "Chưa có thông tin liên hệ"}</p>
-                      <div className="kanban-task__details">
-                        <span>{candidate.email || "Chưa có email"}</span>
-                        <span>{candidate.phone || "Chưa có số điện thoại"}</span>
-                        <span>{candidate.source_note || "Không có ghi chú nguồn"}</span>
-                      </div>
-
-                      <div className="kanban-task__meta">
-                        <span className="kanban-task__priority kanban-task__priority--low">
-                          {CANDIDATE_STATUS_LABELS[candidate.status] || candidate.status}
-                        </span>
-                        <span className="kanban-task__date">
-                          {formatShortDate(candidate.updated_at, locale)}
-                        </span>
-                        <span className="kanban-task__avatar">{getInitials(candidate.full_name)}</span>
-                      </div>
-                    </article>
-                  ))}
-                  {!column.items.length ? (
-                    <article className="kanban-task kanban-task--empty">
-                      <p>{t("common.noDataYet")}</p>
-                    </article>
-                  ) : null}
-                </div>
-              </section>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {activeTab === "exam-list" ? (
         <div className="surface two-col">
@@ -1100,10 +1030,10 @@ function Module3Page() {
                 <input
                   type="checkbox"
                   checked={allPendingResultsSelected}
-                  disabled={!pendingResultCandidateIds.length || bulkResultUpdating}
+                  disabled={!allResultCandidateIds.length || bulkResultUpdating}
                   onChange={(e) => toggleSelectAllPendingResults(e.target.checked)}
                 />
-                <span>Chọn tất cả ứng viên đang chờ</span>
+                <span>Chọn tất cả ứng viên</span>
               </label>
               <button
                 type="button"
@@ -1141,7 +1071,7 @@ function Module3Page() {
                       <td>
                         <input
                           type="checkbox"
-                          disabled={row.result_status !== "Pending" || bulkResultUpdating}
+                          disabled={bulkResultUpdating}
                           checked={bulkResultIds.includes(row.id)}
                           onChange={(e) => toggleBulkResultSelection(row.id, e.target.checked)}
                         />
@@ -1154,28 +1084,24 @@ function Module3Page() {
                         </span>
                       </td>
                       <td>
-                        {row.result_status === "Pending" ? (
-                          <div className="row-actions">
-                            <button
-                              type="button"
-                              className="btn small"
-                              disabled={rowLoadingId === row.id}
-                              onClick={() => handleUpdateResultInSession(row.id, "Pass")}
-                            >
-                              {t("module3.pass")}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn small"
-                              disabled={rowLoadingId === row.id}
-                              onClick={() => handleUpdateResultInSession(row.id, "Fail")}
-                            >
-                              {t("module3.fail")}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="tiny muted">Đã chốt kết quả</span>
-                        )}
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn small"
+                            disabled={rowLoadingId === row.id || row.result_status === "Pass"}
+                            onClick={() => handleUpdateResultInSession(row.id, "Pass")}
+                          >
+                            {t("module3.pass")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn small"
+                            disabled={rowLoadingId === row.id || row.result_status === "Fail"}
+                            onClick={() => handleUpdateResultInSession(row.id, "Fail")}
+                          >
+                            {t("module3.fail")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
