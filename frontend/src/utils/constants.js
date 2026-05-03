@@ -4,7 +4,8 @@ export const CANDIDATE_STATUSES = [
   'WAITING_FORM_MATCH',
   'FORM_MATCHED_WAITING_EXAM',
   'PASSED',
-  'FAILED_POOL'
+  'FAILED_POOL',
+  'CONTRACT_SIGNED'
 ];
 
 export const CANDIDATE_STATUS_LABELS = {
@@ -13,7 +14,8 @@ export const CANDIDATE_STATUS_LABELS = {
   WAITING_FORM_MATCH: 'Chờ ghép form',
   FORM_MATCHED_WAITING_EXAM: 'Đã ghép form, chờ thi',
   PASSED: 'Đạt',
-  FAILED_POOL: 'Kho trượt'
+  FAILED_POOL: 'Kho trượt',
+  CONTRACT_SIGNED: 'Đã ký hợp đồng'
 };
 
 export const JOB_ORDER_STATUSES = [
@@ -51,3 +53,22 @@ export const DOC_STATUS_LABELS = {
   VERIFIED: 'Đã xác minh',
   REJECTED: 'Từ chối'
 };
+
+export const CONTRACT_STATUSES = {
+  DRAFT: 'DRAFT',
+  PENDING_SIGNATURE: 'PENDING_SIGNATURE',
+  SIGNED: 'SIGNED',
+  LIQUIDATED: 'LIQUIDATED',
+  DISPUTED: 'DISPUTED',
+  CANCELLED: 'CANCELLED'
+};
+
+export const CONTRACT_STATUS_LABELS = {
+  DRAFT: 'Nháp',
+  PENDING_SIGNATURE: 'Chờ ký',
+  SIGNED: 'Đã ký',
+  LIQUIDATED: 'Đã thanh lý',
+  DISPUTED: 'Tranh chấp',
+  CANCELLED: 'Đã hủy'
+};
+
