@@ -5,6 +5,8 @@ import DashboardPage from "./pages/DashboardPage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import PartnersJobsPage from "./pages/PartnersJobsPage";
 import Module3Page from "./pages/Module3Page";
+import Module4Page from "./pages/Module4Page";
+import Module9TrainingPage from "./pages/Module9TrainingPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import ChatPage from "./pages/ChatPage";
@@ -103,10 +105,11 @@ function App() {
         <Route path="/module-1" element={<RecruitmentPage />} />
         <Route path="/module-2" element={<PartnersJobsPage />} />
         <Route path="/module-3" element={<Module3Page />} />
-        <Route path="/module-4" element={<RoadmapPage />} />
+        <Route path="/module-4" element={<Module4Page />} />
         <Route path="/module-5" element={<RoadmapPage />} />
         <Route path="/module-6" element={<DocumentsPage />} />
         <Route path="/module-7" element={<RoadmapPage />} />
+        <Route path="/module-9" element={<Module9TrainingPage />} />
         <Route path="/mail" element={<EmailPage />} />
         <Route path="/wizard" element={<ChatPage />} />
         <Route path="/roadmap" element={<RoadmapPage />} />
