@@ -85,7 +85,7 @@ He thong quan ly toan bo quy trinh tuyen dung, thi tuyen, ky hop dong, thu phi, 
 cd backend
 npm install
 ```
-2) Tao database va chay migration SQL (theo thu tu v1.0 -> v1.8)
+2) Tao database va chay migration SQL (theo thu tu v1.0 -> v1.10)
 3) Tao file .env
 ```
 DB_HOST=localhost
@@ -126,6 +126,10 @@ npm run dev
 
 ## Tai lieu API
 - Xem chi tiet API M9 (Giao vien, Lop hoc, Xep lop): [docs/M9_API.md](docs/M9_API.md)
+
+## Ghi chu migration Mail module
+- Bảng cho Mail module (email_templates, email_logs) da duoc bo sung o [backend/database/v1.10.sql](backend/database/v1.10.sql).
+- Neu database da ton tai tu cac ban cu, chi can chay them file [backend/database/v1.10.sql](backend/database/v1.10.sql) de dong bo schema va template mac dinh.
 
 ## Huong phat trien tiep
 - Audit log cho thay doi nhay cam.
