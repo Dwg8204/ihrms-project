@@ -11,9 +11,12 @@ const jobOrderRoutes = require('./routes/jobOrderRoutes');
 const examApplicationRoutes = require('./routes/examApplicationRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const educationLevelRoutes = require('./routes/educationLevelRoutes');
+const teacherRoutes = require('./routes/teacherRoutes');
+const classRoutes = require('./routes/classRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const cron = require('node-cron');
 const JobOrder = require('./models/jobOrderModel');
+const { ClassModel } = require('./models/classModel');
 
 const app = express();
 
@@ -36,12 +39,15 @@ app.use('/api/job-orders', jobOrderRoutes);
 app.use('/api/exam-applications', examApplicationRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/education-levels', educationLevelRoutes);
+app.use('/api/teachers', teacherRoutes);
+app.use('/api/classes', classRoutes);
 
 cron.schedule('0 0 * * *', async () => {
     console.log('Running daily cron job for job orders...');
     try {
         await JobOrder.updateExpiredJobOrders();
         await JobOrder.hardDeleteCancelledJobOrders(7); // Xóa vĩnh viễn các đơn hàng đã hủy quá 7 ngày.
+    await ClassModel.updateStartedClasses();
     } catch (error) {
         console.error('Error during daily cron job:', error);
     }

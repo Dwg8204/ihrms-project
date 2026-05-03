@@ -74,6 +74,14 @@ const TrendIcon = () => (
   </svg>
 );
 
+const BookIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="sidebar__nav-icon-svg">
+    <path d="M6 5.5h8.5a3 3 0 0 1 3 3V19a2 2 0 0 0-2-2H6" />
+    <path d="M6 5.5v11.5a2 2 0 0 1 2-2h9" />
+    <path d="M6 5.5a2 2 0 0 0-2 2V19a2 2 0 0 1 2-2" />
+  </svg>
+);
+
 const MailIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" className="sidebar__nav-icon-svg">
     <path d="M4.5 6.5h15v11h-15z" />
@@ -117,6 +125,11 @@ function Sidebar() {
             label: "Lịch thi & Đào tạo",
             icon: RocketIcon,
             to: "/module-3",
+          },
+          {
+            label: "Quản lý đào tạo",
+            icon: BookIcon,
+            to: "/module-9",
           },
           {
             label: "Hợp đồng dịch vụ",
