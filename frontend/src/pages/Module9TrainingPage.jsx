@@ -349,36 +349,28 @@ function Module9TrainingPage() {
   ];
 
   return (
-    <section className="page-grid training-shell">
-      <div className="training-hero">
-        <div className="training-hero__left">
-          <p className="training-hero__kicker">M9 - Quản lý đào tạo</p>
-          <h2 className="training-hero__title">Hệ thống đào tạo nội bộ</h2>
-          <p className="training-hero__subtitle">
-            Theo dõi giáo viên, lớp học và danh sách học viên. Thiết kế để thao tác nhanh,
-            luồng dữ liệu rõ ràng, phù hợp thực tế giáo vụ.
-          </p>
-          <div className="training-hero__meta">
-            <span className="training-pill">Giảng viên: {totalTeachers}</span>
-            <span className="training-pill training-pill--sun">Lớp học: {totalClasses}</span>
+    <section className="page-grid module9-page">
+      <div className="surface">
+        <SectionHeader
+          title="M9. Quản lý đào tạo"
+          subtitle="Theo dõi giảng viên, lớp học và sĩ số theo luồng thao tác thống nhất với toàn hệ thống."
+        />
+        <div className="stats-grid module9-stats-grid">
+          <div className="stat-card tone-ocean">
+            <p className="stat-label">Tổng giảng viên</p>
+            <p className="stat-value">{totalTeachers}</p>
           </div>
-        </div>
-        <div className="training-hero__right">
-          <div className="training-stat">
-            <div className="training-stat__label">Đang giảng dạy</div>
-            <div className="training-stat__value">
-              {classes.filter((item) => item.status === "IN_PROGRESS").length}
-            </div>
+          <div className="stat-card tone-sun">
+            <p className="stat-label">Tổng lớp học</p>
+            <p className="stat-value">{totalClasses}</p>
           </div>
-          <div className="training-stat training-stat--sun">
-            <div className="training-stat__label">Sắp mở</div>
-            <div className="training-stat__value">
-              {classes.filter((item) => item.status === "PENDING").length}
-            </div>
+          <div className="stat-card tone-mint">
+            <p className="stat-label">Đang giảng dạy</p>
+            <p className="stat-value">{classes.filter((item) => item.status === "IN_PROGRESS").length}</p>
           </div>
-          <div className="training-stat training-stat--mint">
-            <div className="training-stat__label">Học viên đang học</div>
-            <div className="training-stat__value">{classStudents.length}</div>
+          <div className="stat-card tone-alert">
+            <p className="stat-label">Học viên đang học</p>
+            <p className="stat-value">{classStudents.length}</p>
           </div>
         </div>
       </div>
@@ -393,7 +385,7 @@ function Module9TrainingPage() {
 
       {activeTab === "teachers" ? (
         <div className="training-grid">
-          <div className="surface training-panel">
+          <div className="surface">
             <SectionHeader
               title={editingTeacherId ? "Chỉnh sửa giảng viên" : "Tạo giảng viên mới"}
               subtitle="Hồ sơ cơ hữu và thỉnh giảng, phân loại chuyên môn rõ ràng."
@@ -485,12 +477,12 @@ function Module9TrainingPage() {
             </form>
           </div>
 
-          <div className="surface training-panel">
+          <div className="surface">
             <SectionHeader
               title="Danh sách giảng viên"
               subtitle="Lọc nhanh theo chuyên môn và trạng thái hoạt động."
             />
-            <div className="filter-row training-filter">
+            <div className="filter-row module9-filter-row">
               <input
                 placeholder="Tìm kiếm họ tên, email, SĐT"
                 value={teacherSearch}
@@ -577,7 +569,7 @@ function Module9TrainingPage() {
       ) : (
         <div className="training-stack">
           <div className="training-grid">
-            <div className="surface training-panel">
+            <div className="surface">
               <SectionHeader
                 title={editingClassId ? "Chỉnh sửa lớp học" : "Tạo lớp học mới"}
                 subtitle="Gán giáo viên chủ nhiệm và theo dõi tiến độ giảng dạy."
@@ -684,12 +676,12 @@ function Module9TrainingPage() {
               </form>
             </div>
 
-            <div className="surface training-panel">
+            <div className="surface">
               <SectionHeader
                 title="Danh sách lớp học"
                 subtitle="Theo dõi nhanh các lớp đang mở và lớp đã hoàn thành."
               />
-              <div className="filter-row training-filter">
+              <div className="filter-row module9-filter-row">
                 <input
                   placeholder="Tìm tên lớp / giáo viên"
                   value={classSearch}
@@ -716,7 +708,7 @@ function Module9TrainingPage() {
                   Làm mới
                 </button>
               </div>
-              <div className="filter-row training-filter training-filter--compact">
+              <div className="filter-row module9-filter-row module9-filter-row--compact">
                 <select
                   value={classTeacherFilter}
                   onChange={(event) => setClassTeacherFilter(event.target.value)}
@@ -806,7 +798,7 @@ function Module9TrainingPage() {
             </div>
           </div>
 
-          <div className="surface training-panel">
+          <div className="surface">
             <SectionHeader
                 title="Xếp lớp và theo dõi sĩ số"
                 subtitle="Thêm học viên từ danh sách đã trúng tuyển, cập nhật điểm trung bình và thái độ."
@@ -894,7 +886,7 @@ function Module9TrainingPage() {
                 <div className="training-roster__header">
                   <strong>Danh sách học viên</strong>
                   {selectedClass ? (
-                    <span className="training-pill training-pill--sun">
+                    <span className="badge warn">
                       {classStudents.length} học viên
                     </span>
                   ) : null}

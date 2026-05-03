@@ -94,7 +94,7 @@ function getBadgeClass(status) {
 }
 
 function RecruitmentPage() {
-  const [activeTab, setActiveTab] = useState('intake');
+  const [activeTab, setActiveTab] = useState('funnel');
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [updating, setUpdating] = useState(false);

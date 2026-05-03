@@ -86,12 +86,12 @@ function TemplateEditorModal({ templateId, form, setForm, onSave, onClose, savin
         </div>
 
         {selecting ? (
-          <p className="muted center" style={{ padding: '40px 0' }}>Đang tải dữ liệu...</p>
+          <p className="muted center email-modal-loading">Đang tải dữ liệu...</p>
         ) : (
           <div className="email-modal-body">
             {/* Left: form + editor */}
             <div className="email-modal-left">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="email-modal-meta">
                 <label>
                   Mã mẫu (template_code)
                   <input
@@ -104,7 +104,7 @@ function TemplateEditorModal({ templateId, form, setForm, onSave, onClose, savin
                     }
                     placeholder="Ví dụ: EXAM_PASS_NOTIFY"
                   />
-                  <span className="tiny muted" style={{ marginTop: 2 }}>
+                  <span className="tiny muted email-modal-hint">
                     Chỉ dùng chữ, số và dấu gạch dưới.
                   </span>
                 </label>
@@ -128,8 +128,8 @@ function TemplateEditorModal({ templateId, form, setForm, onSave, onClose, savin
                     placeholder="Nhập tiêu đề email..."
                     className="subject-raw-input"
                   />
-                  <span className="tiny muted" style={{ marginTop: 2 }}>
-                    Xem trước khi gửi: <strong style={{ color: 'var(--ink-900)' }}>{applySample(form.subject) || '—'}</strong>
+                  <span className="tiny muted email-modal-hint">
+                    Xem trước khi gửi: <strong className="email-modal-preview-highlight">{applySample(form.subject) || '—'}</strong>
                   </span>
                 </label>
               </div>
@@ -151,7 +151,7 @@ function TemplateEditorModal({ templateId, form, setForm, onSave, onClose, savin
                       </button>
                     ))}
                   </div>
-                  <span className="tiny muted" style={{ alignSelf: 'center' }}>Chèn biến:</span>
+                  <span className="tiny muted email-toolbar-hint">Chèn biến:</span>
                   <div className="email-variable-row">
                     {variableSuggestions.map((item) => (
                       <button
@@ -188,14 +188,14 @@ function TemplateEditorModal({ templateId, form, setForm, onSave, onClose, savin
                 </div>
                 <div
                   className="email-preview"
-                  dangerouslySetInnerHTML={{ __html: applySample(form.body_html) || '<span class="muted" style="font-size:13px">Nội dung sẽ hiện ở đây...</span>' }}
+                  dangerouslySetInnerHTML={{ __html: applySample(form.body_html) || '<span class="muted email-preview-placeholder">Nội dung sẽ hiện ở đây...</span>' }}
                 />
               </div>
             </div>
           </div>
         )}
 
-        <div className="detail-modal-foot" style={{ marginTop: 16 }}>
+        <div className="detail-modal-foot email-modal-foot">
           <button type="button" className="btn ghost" onClick={onClose}>Hủy</button>
           <button type="button" className="btn" onClick={onSave} disabled={saving || selecting}>
             {saving ? 'Đang lưu...' : templateId ? 'Cập nhật' : 'Tạo mẫu'}
@@ -414,7 +414,7 @@ function EmailPage() {
   };
 
   return (
-    <section className="page-grid">
+    <section className="page-grid mail-center-page">
       {/* Header */}
       <div className="surface">
         <SectionHeader
@@ -449,16 +449,16 @@ function EmailPage() {
             Gửi thủ công
           </button>
         </div>
-        {loading && <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>Đang tải...</p>}
+        {loading && <p className="muted mail-center-loading">Đang tải...</p>}
       </div>
 
       {/* Templates tab */}
       {activeTab === 'templates' && (
         <div className="surface">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div className="mail-center-templates-head">
             <div>
-              <p style={{ fontWeight: 700, fontSize: 15, margin: 0 }}>Danh sách mẫu email</p>
-              <p className="muted" style={{ fontSize: 13, margin: 0 }}>{templates.length} mẫu</p>
+              <p className="mail-center-templates-title">Danh sách mẫu email</p>
+              <p className="muted mail-center-templates-count">{templates.length} mẫu</p>
             </div>
             <button type="button" className="btn" onClick={openNew}>
               + Tạo mẫu mới
@@ -547,7 +547,7 @@ function EmailPage() {
                 ))}
                 {!logs.length && (
                   <tr>
-                    <td colSpan={7} className="center muted" style={{ padding: '24px 0' }}>
+                    <td colSpan={7} className="center muted mail-center-empty-row">
                       Chưa có lịch sử gửi email.
                     </td>
                   </tr>
@@ -570,7 +570,7 @@ function EmailPage() {
             }
           />
 
-          <div className="grid-form" style={{ marginBottom: 12 }}>
+          <div className="grid-form mail-center-form-grid">
             <label className="field-span-2">
               Mẫu email
               <select value={manualTemplateId} onChange={(e) => setManualTemplateId(e.target.value)}>
@@ -593,8 +593,8 @@ function EmailPage() {
             </label>
           </div>
 
-          <div className="row-actions" style={{ marginBottom: 8 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <div className="row-actions mail-center-row-actions">
+            <label className="mail-center-select-all">
               <input type="checkbox" checked={isAllFilteredSelected} onChange={toggleSelectAllFiltered} />
               Chọn tất cả danh sách đang lọc
             </label>
@@ -605,7 +605,7 @@ function EmailPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: 42 }}></th>
+                  <th className="mail-center-select-col"></th>
                   <th>Họ tên</th>
                   <th>Email</th>
                   <th>Số điện thoại</th>
