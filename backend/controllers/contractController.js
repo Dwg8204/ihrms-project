@@ -40,6 +40,11 @@ exports.createContract = async (req, res, next) => {
       signed_date, effective_date, expiry_date, status,
       document_url, contract_details_json
     });
+
+    if (status === CONTRACT_STATUSES.SIGNED) {
+      await Candidate.transitionStatus(parseInt(candidate_id), CANDIDATE_STATUSES.CONTRACT_SIGNED);
+    }
+
     res.status(201).json({ success: true, data: newContract, message: 'Contract created successfully.' });
   } catch (error) {
     if (error.message.includes('Candidate not found') || error.message.includes('Candidate must be in')) {
@@ -121,7 +126,10 @@ exports.updateContract = async (req, res, next) => {
       candidate_id: candidate_id ? parseInt(candidate_id) : undefined,
       job_order_id: job_order_id ? parseInt(job_order_id) : undefined,
       contract_number, contract_type,
-      signed_date, effective_date, expiry_date, status,
+      signed_date: signed_date === "" ? null : signed_date,
+      effective_date: effective_date === "" ? null : effective_date,
+      expiry_date: expiry_date === "" ? null : expiry_date,
+      status,
       document_url, contract_details_json
     });
 
@@ -130,11 +138,9 @@ exports.updateContract = async (req, res, next) => {
     }
 
     // --- TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI ỨNG VIÊN (Tích hợp Mô-đun 1) ---
-    // Trạng thái ứng viên chuyển đổi nếu trạng thái hợp đồng thay đổi thành ĐÃ KÝ.
-    if (status === CONTRACT_STATUSES.SIGNED && currentContract.status !== CONTRACT_STATUSES.SIGNED) {
+    if (status === CONTRACT_STATUSES.SIGNED) {
         await Candidate.transitionStatus(currentContract.candidate_id, CANDIDATE_STATUSES.CONTRACT_SIGNED);
     }
-    // Cân nhắc việc khôi phục trạng thái ứng viên nếu hợp đồng thay đổi từ SIGNED sang PENDING/CANCELLED
 
     res.status(200).json({ success: true, data: updatedContract, message: 'Contract updated successfully.' });
   } catch (error) {

@@ -39,7 +39,6 @@ const createCloudinaryUploader = (folderName) => {
     cloudinary,
     params: {
       folder: folderName, // Thư mục động
-      allowed_formats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
       resource_type: 'auto'
     }
   });
