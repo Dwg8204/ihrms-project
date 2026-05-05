@@ -5,7 +5,8 @@ export const CANDIDATE_STATUSES = [
   'FORM_MATCHED_WAITING_EXAM',
   'PASSED',
   'FAILED_POOL',
-  'CONTRACT_SIGNED'
+  'CONTRACT_SIGNED',
+  'WITHDRAWN'
 ];
 
 export const CANDIDATE_STATUS_LABELS = {
@@ -15,7 +16,8 @@ export const CANDIDATE_STATUS_LABELS = {
   FORM_MATCHED_WAITING_EXAM: 'Đã ghép form, chờ thi',
   PASSED: 'Đạt',
   FAILED_POOL: 'Kho trượt',
-  CONTRACT_SIGNED: 'Đã ký hợp đồng'
+  CONTRACT_SIGNED: 'Đã ký hợp đồng',
+  WITHDRAWN: 'Đã rút hồ sơ'
 };
 
 export const JOB_ORDER_STATUSES = [
@@ -72,3 +74,52 @@ export const CONTRACT_STATUS_LABELS = {
   CANCELLED: 'Đã hủy'
 };
 
+export const PAYMENT_SCHEDULE_STATUSES = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  PARTIALLY_PAID: 'PARTIALLY_PAID',
+  OVERDUE: 'OVERDUE',
+  CANCELLED: 'CANCELLED',
+  REFUNDED: 'REFUNDED'
+};
+
+export const PAYMENT_SCHEDULE_STATUS_LABELS = {
+  PENDING: 'Chờ thanh toán',
+  PAID: 'Đã thanh toán',
+  PARTIALLY_PAID: 'Thanh toán một phần',
+  OVERDUE: 'Quá hạn',
+  CANCELLED: 'Đã hủy',
+  REFUNDED: 'Đã hoàn tiền'
+};
+
+export const TRANSACTION_TYPES = {
+  INCOME: 'INCOME',
+  REFUND: 'REFUND'
+};
+
+export const TRANSACTION_TYPE_LABELS = {
+  INCOME: 'Thu tiền',
+  REFUND: 'Hoàn tiền'
+};
+
+export const FEE_CATEGORIES = {
+  INITIAL: 'INITIAL',
+  TRAINING: 'TRAINING',
+  SERVICE: 'SERVICE',
+  CERTIFICATE: 'CERTIFICATE',
+  VISA_PASSPORT: 'VISA_PASSPORT',
+  INSURANCE: 'INSURANCE',
+  DEPOSIT: 'DEPOSIT',
+  OTHER: 'OTHER'
+};
+
+export const FEE_CATEGORY_LABELS = {
+  INITIAL: 'Phí ban đầu',
+  TRAINING: 'Học phí/Đào tạo',
+  SERVICE: 'Phí dịch vụ',
+  CERTIFICATE: 'Phí chứng chỉ',
+  VISA_PASSPORT: 'Visa/Hộ chiếu',
+  INSURANCE: 'Bảo hiểm',
+  DEPOSIT: 'Tiền cọc',
+  OTHER: 'Khác'
+};

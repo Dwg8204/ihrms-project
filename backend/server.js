@@ -14,6 +14,9 @@ const educationLevelRoutes = require('./routes/educationLevelRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const teacherRoutes = require('./routes/teacherRoutes');
 const classRoutes = require('./routes/classRoutes');
+const feeStandardRoutes = require('./routes/feeStandardRoutes');
+const transactionRoutes = require('./routes/transactionRoutes');
+const paymentScheduleRoutes = require('./routes/paymentScheduleRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const cron = require('node-cron');
 const JobOrder = require('./models/jobOrderModel');
@@ -44,6 +47,9 @@ app.use('/api/education-levels', educationLevelRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/fee-standards', feeStandardRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/payment-schedules', paymentScheduleRoutes);
 
 ensureEmailSchema().catch((error) => {
   console.error('Cannot initialize email schema:', error.message);

@@ -9,6 +9,7 @@ import Module4Page from "./pages/Module4Page";
 import Module9TrainingPage from "./pages/Module9TrainingPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import RoadmapPage from "./pages/RoadmapPage";
+import FinancePage from "./pages/FinancePage";
 import ChatPage from "./pages/ChatPage";
 import EmailPage from "./pages/EmailPage";
 import { useEffect, useMemo, useState } from "react";
@@ -106,7 +107,7 @@ function App() {
         <Route path="/module-2" element={<PartnersJobsPage />} />
         <Route path="/module-3" element={<Module3Page />} />
         <Route path="/module-4" element={<Module4Page />} />
-        <Route path="/module-5" element={<RoadmapPage />} />
+        <Route path="/module-5" element={<FinancePage />} />
         <Route path="/module-6" element={<DocumentsPage />} />
         <Route path="/module-7" element={<RoadmapPage />} />
         <Route path="/module-9" element={<Module9TrainingPage />} />

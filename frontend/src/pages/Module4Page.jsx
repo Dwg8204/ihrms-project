@@ -81,12 +81,14 @@ function Module4Page() {
   // Fetch Master Data: Candidates & Job Orders
   const loadMasterData = async () => {
     try {
-      const [candRes, jobRes] = await Promise.all([
+      const [candRes, jobRes, tmplRes] = await Promise.all([
         recruitmentService.getCandidates({ page: 1, limit: 500 }),
-        jobOrderService.getJobOrders({ page: 1, limit: 500 })
+        jobOrderService.getJobOrders({ page: 1, limit: 500 }),
+        contractService.getContractTemplates({ page: 1, limit: 200 })
       ]);
       setCandidates(candRes.data || []);
       setJobOrders(jobRes.data || []);
+      setTemplates(tmplRes.data || []);
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
@@ -632,11 +634,21 @@ function Module4Page() {
 
           <label className="field-span-1">
             Loại hợp đồng *
-            <input
-              placeholder="Ví dụ: Thỏa thuận dịch vụ / Hợp đồng cam kết..."
+            <select
               value={contractForm.contract_type}
               onChange={(e) => setContractForm((prev) => ({ ...prev, contract_type: e.target.value }))}
-            />
+            >
+              <option value="">Chọn loại/mẫu hợp đồng</option>
+              {templates.map((tmpl) => (
+                <option key={tmpl.id} value={tmpl.name}>
+                  {tmpl.name}
+                </option>
+              ))}
+              {/* Fallback if templates are empty or the current type isn't in templates */}
+              {contractForm.contract_type && !templates.some(t => t.name === contractForm.contract_type) && (
+                <option value={contractForm.contract_type}>{contractForm.contract_type}</option>
+              )}
+            </select>
           </label>
 
           <label className="field-span-1">

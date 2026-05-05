@@ -3,6 +3,9 @@ const { CANDIDATE_STATUSES, STATUS_ORDER, canTransition } = require('../utils/ca
 const DocumentModel = require('./documentModel');
 const JobOrder = require('./jobOrderModel');
 const EducationLevel = require('./educationLevelModel'); 
+const FeeStandard = require('./feeStandardModel');
+const PaymentSchedule = require('./paymentScheduleModel');
+const Transaction = require('./transactionModel');
 
 const ALLOWED_UPDATE_FIELDS = [
   'citizen_id',
@@ -20,6 +23,7 @@ const ALLOWED_UPDATE_FIELDS = [
   'source_id',
   'source_note',
   //'status', //Xóa 'status' khỏi ALLOWED_UPDATE_FIELDS để bắt buộc sử dụng transitionStatus cho các thay đổi trạng thái.
+  'withdrawal_reason',
   'is_fee0_paid',
   'fee0_paid_amount',
   'fee0_paid_at',
@@ -79,6 +83,7 @@ const Candidate = {
         c.fee0_paid_amount,
         c.fee0_paid_at,
         c.cv_file_url,
+        c.withdrawal_reason,
         c.created_at,
         c.updated_at,
         s.source_name
@@ -124,6 +129,7 @@ const Candidate = {
         c.fee0_paid_amount,
         c.fee0_paid_at,
         c.cv_file_url,
+        c.withdrawal_reason,
         c.created_at,
         c.updated_at,
         s.source_name
@@ -161,6 +167,7 @@ const Candidate = {
         c.fee0_paid_amount,
         c.fee0_paid_at,
         c.cv_file_url,
+        c.withdrawal_reason,
         c.created_at,
         c.updated_at,
         s.source_name
@@ -244,8 +251,35 @@ const Candidate = {
       }
     }
 
-    if (!updates.length) {
-      return false;
+    // --- LOGIC TÀI CHÍNH ĐỢT 0 (Module 5) ---
+    // Nếu is_fee0_paid được bật từ 0 lên 1, tự động tạo lịch thanh toán và giao dịch
+    const oldCandidate = await Candidate.getById(id);
+    if (oldCandidate && !oldCandidate.is_fee0_paid && candidateData.is_fee0_paid == 1) {
+        // Tìm các phí Đợt 0 (INITIAL, ON_REGISTRATION hoặc BEFORE_INTERNAL_EXAM/HEALTH_CHECK)
+        const standards = await FeeStandard.findAll({ fee_category: 'INITIAL' });
+        for (const std of standards) {
+            // Tạo lịch thanh toán đã hoàn thành (PAID)
+            const schedule = await PaymentSchedule.create({
+                candidate_id: id,
+                description: std.fee_name,
+                amount_due: std.amount,
+                due_date: new Date(),
+                status: 'PAID',
+                amount_paid: std.amount,
+                is_mandatory_for_exit: std.is_mandatory_for_exit,
+                triggered_by_event: 'INITIAL_REGISTRATION'
+            });
+
+            // Ghi nhận giao dịch
+            await Transaction.create({
+                candidate_id: id,
+                fee_standard_id: std.id,
+                payment_schedule_id: schedule.id,
+                amount_paid: std.amount,
+                transaction_type: 'INCOME',
+                note: 'Tự động ghi nhận khi xác nhận đã nộp phí Đợt 0'
+            });
+        }
     }
 
     values.push(id);
@@ -263,7 +297,7 @@ const Candidate = {
   },
 
   // Phương thức transitionStatus được sửa đổi với các Gate Conditions
-  transitionStatus: async (candidateId, newStatus, { jobOrderId = null } = {}) => {
+  transitionStatus: async (candidateId, newStatus, { jobOrderId = null, withdrawalReason = null } = {}) => {
     const candidate = await Candidate.getById(candidateId);
     if (!candidate) {
       throw new Error('Candidate not found.');
@@ -271,7 +305,7 @@ const Candidate = {
 
     const currentStatus = candidate.status;
 
-    if (currentStatus === newStatus) {
+    if (currentStatus === newStatus && newStatus !== CANDIDATE_STATUSES.WITHDRAWN) {
       return { success: true, message: 'Status already up-to-date.' };
     }
 
@@ -350,15 +384,35 @@ const Candidate = {
         break;
     }
 
+    // Xác định lý do rút hồ sơ cuối cùng
+    let finalWithdrawalReason = null;
+    if (newStatus === CANDIDATE_STATUSES.WITHDRAWN) {
+      finalWithdrawalReason = withdrawalReason || candidate.withdrawal_reason || 'TH3';
+    }
+
     // Thực hiện cập nhật trạng thái
     const [result] = await db.query(
-      `
-      UPDATE candidates
-      SET status = ?
-      WHERE id = ?
-      `,
-      [newStatus, candidateId]
+      'UPDATE candidates SET status = ?, withdrawal_reason = ? WHERE id = ?',
+      [newStatus, finalWithdrawalReason, candidateId]
     );
+
+    // --- XỬ LÝ TÀI CHÍNH KHI CHUYỂN TRẠNG THÁI (Module 5) ---
+    if (result.affectedRows > 0) {
+        if (newStatus === CANDIDATE_STATUSES.PASSED) {
+            // Tự động sinh phí khi đỗ đơn (Ví dụ: Phí hồ sơ, phí cọc đợt 1)
+            await PaymentSchedule.generateByEvent(candidateId, 'ON_PASSED_EXAM', { jobOrderId });
+        } else if (newStatus === CANDIDATE_STATUSES.FAILED_POOL) {
+            // TH1: Thi trượt
+            await PaymentSchedule.cancelPendingSchedules(candidateId, 'EXAM_FAILED');
+            // Manual confirmation preferred for refunds
+        } else if (newStatus === CANDIDATE_STATUSES.WITHDRAWN) {
+            // Cancel unpaid schedules
+            await db.query(
+              "UPDATE payment_schedules SET status = 'CANCELLED' WHERE candidate_id = ? AND status = 'PENDING'",
+              [candidateId]
+            );
+        }
+    }
 
     return { success: result.affectedRows > 0, message: `Candidate status updated to ${newStatus}.` };
   },
