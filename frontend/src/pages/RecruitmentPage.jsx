@@ -19,6 +19,15 @@ import {
 } from '../utils/constants';
 import { formatDate, formatDateTime, formatCurrency } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
+import {
+  digitsOnly,
+  getCurrentDateTimeLocal,
+  getTodayDateInput,
+  isFutureDateTimeInput,
+  isOptionalEmail,
+  isOptionalVietnamesePhoneNumber,
+  isPastDateInput
+} from '../utils/validation';
 
 const initialCandidateForm = {
   citizen_id: '',
@@ -108,6 +117,50 @@ function getBadgeClass(status) {
   if (status === 'PASSED') return 'badge ok';
   if (status === 'FAILED_POOL') return 'badge danger';
   return 'badge';
+}
+
+function normalizeCandidateFieldValue(key, value) {
+  if (key === 'citizen_id') return digitsOnly(value, 12);
+  if (key === 'phone') return digitsOnly(value, 10);
+  return value;
+}
+
+function validateCandidateForm(form) {
+  if (!/^\d{12}$/.test(String(form.citizen_id || ''))) {
+    return 'CCCD phải đúng 12 chữ số.';
+  }
+
+  if (!String(form.full_name || '').trim()) {
+    return 'Họ và tên là bắt buộc.';
+  }
+
+  if (!form.source_id) {
+    return 'Vui lòng chọn nguồn tuyển dụng.';
+  }
+
+  if (!isOptionalVietnamesePhoneNumber(form.phone)) {
+    return 'Số điện thoại Việt Nam phải gồm đúng 10 số và bắt đầu bằng 0.';
+  }
+
+  if (!isOptionalEmail(form.email)) {
+    return 'Email không đúng định dạng.';
+  }
+
+  if (form.dob && !isPastDateInput(form.dob)) {
+    return 'Ngày sinh phải trước ngày hiện tại.';
+  }
+
+  const height = Number(form.height);
+  if (String(form.height || '').trim() && (Number.isNaN(height) || height <= 0 || height > 250)) {
+    return 'Chiều cao phải lớn hơn 0 và không vượt quá 250 cm.';
+  }
+
+  const weight = Number(form.weight);
+  if (String(form.weight || '').trim() && (Number.isNaN(weight) || weight <= 0 || weight > 300)) {
+    return 'Cân nặng phải lớn hơn 0 và không vượt quá 300 kg.';
+  }
+
+  return '';
 }
 
 function RecruitmentPage() {
@@ -354,7 +407,7 @@ function RecruitmentPage() {
   }, []);
 
   const onCandidateField = (key, value) => {
-    setCandidateForm((prev) => ({ ...prev, [key]: value }));
+    setCandidateForm((prev) => ({ ...prev, [key]: normalizeCandidateFieldValue(key, value) }));
   };
 
   const handleCreateSource = async (event) => {
@@ -407,6 +460,12 @@ function RecruitmentPage() {
 
   const handleCreateCandidate = async (event) => {
     event.preventDefault();
+    const validationMessage = validateCandidateForm(candidateForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       await recruitmentService.createCandidate(toPayload(candidateForm));
       setCandidateForm(initialCandidateForm);
@@ -510,6 +569,12 @@ function RecruitmentPage() {
     event.preventDefault();
     if (!editingCandidateId) return;
 
+    const validationMessage = validateCandidateForm(editForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       setUpdating(true);
       await recruitmentService.updateCandidate(editingCandidateId, toPayload(editForm));
@@ -543,6 +608,11 @@ function RecruitmentPage() {
       if (canUseExamCreation(targetStatus)) {
         if (!draft.jobOrderId || !draft.examDate) {
           toast.error('Cần chọn đơn hàng và ngày thi trước khi ghép form.');
+          return;
+        }
+
+        if (!isFutureDateTimeInput(draft.examDate)) {
+          toast.error('Ngày thi phải sau thời điểm hiện tại.');
           return;
         }
 
@@ -795,7 +865,7 @@ function RecruitmentPage() {
         <input
           required
           value={form.citizen_id}
-          onChange={(e) => onFieldChange('citizen_id', e.target.value)}
+          onChange={(e) => onFieldChange('citizen_id', normalizeCandidateFieldValue('citizen_id', e.target.value))}
           placeholder="12 chữ số"
           inputMode="numeric"
           pattern="\d{12}"
@@ -823,7 +893,14 @@ function RecruitmentPage() {
       </label>
       <label>
         Số điện thoại
-        <input value={form.phone} onChange={(e) => onFieldChange('phone', e.target.value)} />
+        <input
+          value={form.phone}
+          onChange={(e) => onFieldChange('phone', normalizeCandidateFieldValue('phone', e.target.value))}
+          inputMode="numeric"
+          pattern="0\d{9}"
+          maxLength={10}
+          placeholder="0901234567"
+        />
       </label>
       <label>
         Email
@@ -835,7 +912,12 @@ function RecruitmentPage() {
       </label>
       <label>
         Ngày sinh
-        <input type="date" value={form.dob} onChange={(e) => onFieldChange('dob', e.target.value)} />
+        <input
+          type="date"
+          value={form.dob}
+          max={getTodayDateInput()}
+          onChange={(e) => onFieldChange('dob', e.target.value)}
+        />
       </label>
       <label>
         Giới tính
@@ -847,11 +929,11 @@ function RecruitmentPage() {
       </label>
       <label>
         Chiều cao
-        <input type="number" value={form.height} onChange={(e) => onFieldChange('height', e.target.value)} />
+        <input type="number" min="1" max="250" value={form.height} onChange={(e) => onFieldChange('height', e.target.value)} />
       </label>
       <label>
         Cân nặng
-        <input type="number" value={form.weight} onChange={(e) => onFieldChange('weight', e.target.value)} />
+        <input type="number" min="1" max="300" value={form.weight} onChange={(e) => onFieldChange('weight', e.target.value)} />
       </label>
       <label>
         Nhóm máu
@@ -1247,6 +1329,7 @@ function RecruitmentPage() {
                               <input
                                 type="datetime-local"
                                 value={draft.examDate}
+                                min={getCurrentDateTimeLocal()}
                                 onChange={(e) =>
                                   setTransitionDraft(row, 'examDate', e.target.value)
                                 }
@@ -1369,6 +1452,7 @@ function RecruitmentPage() {
                               <input
                                 type="datetime-local"
                                 value={getTransitionDraft(item.id, item.status).examDate}
+                                min={getCurrentDateTimeLocal()}
                                 onChange={(e) =>
                                   setTransitionDraft(item.id, 'examDate', e.target.value, item.status)
                                 }
@@ -1728,7 +1812,7 @@ function RecruitmentPage() {
       >
         {renderCandidateForm(
           editForm,
-          (key, value) => setEditForm((prev) => ({ ...prev, [key]: value })),
+          (key, value) => setEditForm((prev) => ({ ...prev, [key]: normalizeCandidateFieldValue(key, value) })),
           'Lưu thay đổi',
           handleUpdateCandidate,
           true

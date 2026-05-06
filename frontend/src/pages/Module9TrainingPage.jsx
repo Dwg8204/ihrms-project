@@ -6,6 +6,12 @@ import { teacherService } from "../services/teacherService";
 import { classService } from "../services/classService";
 import { recruitmentService } from "../services/recruitmentService";
 import { getErrorMessage } from "../utils/toast";
+import {
+  digitsOnly,
+  getTomorrowDateInput,
+  isOptionalEmail,
+  isOptionalVietnamesePhoneNumber
+} from "../utils/validation";
 
 const initialTeacherForm = {
   full_name: "",
@@ -58,6 +64,38 @@ const studentStatusLabels = {
 function formatTeacherLabel(teacher) {
   if (!teacher) return "-";
   return `${teacher.full_name || "-"} (${teacherTypeLabels[teacher.teacher_type] || teacher.teacher_type})`;
+}
+
+function validateTeacherForm(form) {
+  if (!String(form.full_name || "").trim()) {
+    return "Họ tên giảng viên là bắt buộc.";
+  }
+  if (!isOptionalVietnamesePhoneNumber(form.phone)) {
+    return "Số điện thoại giảng viên phải gồm đúng 10 số và bắt đầu bằng 0.";
+  }
+  if (!isOptionalEmail(form.email)) {
+    return "Email giảng viên không đúng định dạng.";
+  }
+  return "";
+}
+
+function validateClassForm(form) {
+  if (!String(form.class_name || "").trim()) {
+    return "Tên lớp là bắt buộc.";
+  }
+  if (!form.teacher_id) {
+    return "Vui lòng chọn giáo viên phụ trách.";
+  }
+  if (!form.start_date) {
+    return "Vui lòng chọn ngày bắt đầu lớp.";
+  }
+  if (form.start_date < getTomorrowDateInput()) {
+    return "Ngày bắt đầu lớp phải sau ngày hiện tại.";
+  }
+  if (form.end_date && form.end_date < form.start_date) {
+    return "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.";
+  }
+  return "";
 }
 
 function Module9TrainingPage() {
@@ -208,6 +246,12 @@ function Module9TrainingPage() {
 
   const handleTeacherSubmit = async (event) => {
     event.preventDefault();
+    const validationMessage = validateTeacherForm(teacherForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       if (editingTeacherId) {
         await teacherService.updateTeacher(editingTeacherId, teacherForm);
@@ -252,6 +296,12 @@ function Module9TrainingPage() {
 
   const handleClassSubmit = async (event) => {
     event.preventDefault();
+    const validationMessage = validateClassForm(classForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       const payload = { ...classForm, teacher_id: Number(classForm.teacher_id) };
       if (editingClassId) {
@@ -411,9 +461,12 @@ function Module9TrainingPage() {
                 <input
                   value={teacherForm.phone}
                   onChange={(event) =>
-                    setTeacherForm((prev) => ({ ...prev, phone: event.target.value }))
+                    setTeacherForm((prev) => ({ ...prev, phone: digitsOnly(event.target.value, 10) }))
                   }
                   placeholder="0900000000"
+                  inputMode="numeric"
+                  pattern="0\d{9}"
+                  maxLength={10}
                 />
               </label>
               <label>
@@ -634,6 +687,7 @@ function Module9TrainingPage() {
                   <input
                     type="date"
                     value={classForm.start_date}
+                    min={!editingClassId ? getTomorrowDateInput() : undefined}
                     onChange={(event) =>
                       setClassForm((prev) => ({ ...prev, start_date: event.target.value }))
                     }
@@ -644,6 +698,7 @@ function Module9TrainingPage() {
                   <input
                     type="date"
                     value={classForm.end_date}
+                    min={classForm.start_date || (!editingClassId ? getTomorrowDateInput() : undefined)}
                     onChange={(event) =>
                       setClassForm((prev) => ({ ...prev, end_date: event.target.value }))
                     }

@@ -17,6 +17,13 @@ import {
 } from '../utils/constants';
 import { formatDate, safeJsonParse } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
+import {
+  digitsOnly,
+  getTodayDateInput,
+  isNonNegativeNumber,
+  isOptionalEmail,
+  isOptionalVietnamesePhoneNumber
+} from '../utils/validation';
 
 const initialPartnerForm = {
   name: '',
@@ -180,6 +187,68 @@ function formatRequirementText(requirementsRaw, educationNameMap) {
   return lines.length ? lines : ['Không có yêu cầu cụ thể.'];
 }
 
+function validateJobForm(form) {
+  if (!form.partner_id) {
+    return 'Vui lòng chọn đối tác.';
+  }
+  if (!String(form.job_title || '').trim()) {
+    return 'Tên đơn hàng là bắt buộc.';
+  }
+  if (!Number.isInteger(Number(form.quantity_needed)) || Number(form.quantity_needed) <= 0) {
+    return 'Số lượng tuyển phải là số nguyên dương.';
+  }
+  if (!form.deadline) {
+    return 'Hạn chót là bắt buộc.';
+  }
+  if (form.deadline < getTodayDateInput()) {
+    return 'Hạn chót không được ở quá khứ.';
+  }
+
+  const ageMin = String(form.req_age_min || '').trim();
+  const ageMax = String(form.req_age_max || '').trim();
+  if (ageMin && !isNonNegativeNumber(ageMin)) return 'Tuổi tối thiểu phải là số không âm.';
+  if (ageMax && !isNonNegativeNumber(ageMax)) return 'Tuổi tối đa phải là số không âm.';
+  if (ageMin && ageMax && Number(ageMin) > Number(ageMax)) return 'Tuổi tối thiểu không được lớn hơn tuổi tối đa.';
+
+  if (String(form.req_experience_min || '').trim() && !isNonNegativeNumber(form.req_experience_min)) {
+    return 'Kinh nghiệm tối thiểu phải là số không âm.';
+  }
+  if (String(form.req_height_min || '').trim() && !isNonNegativeNumber(form.req_height_min)) {
+    return 'Chiều cao tối thiểu phải là số không âm.';
+  }
+  if (String(form.req_weight_min || '').trim() && !isNonNegativeNumber(form.req_weight_min)) {
+    return 'Cân nặng tối thiểu phải là số không âm.';
+  }
+
+  return '';
+}
+
+function validatePartnerForm(form) {
+  if (!String(form.name || '').trim()) {
+    return 'Tên đối tác là bắt buộc.';
+  }
+  if (!isOptionalVietnamesePhoneNumber(form.phone)) {
+    return 'Số điện thoại đối tác phải gồm đúng 10 số và bắt đầu bằng 0.';
+  }
+  if (!isOptionalEmail(form.email)) {
+    return 'Email đối tác không đúng định dạng.';
+  }
+  return '';
+}
+
+function validateContactForm(form) {
+  if (!String(form.contact_name || '').trim()) {
+    return 'Tên liên hệ là bắt buộc.';
+  }
+  if (!isOptionalVietnamesePhoneNumber(form.contact_phone)) {
+    return 'Số điện thoại liên hệ phải gồm đúng 10 số và bắt đầu bằng 0.';
+  }
+  if (!isOptionalEmail(form.contact_email)) {
+    return 'Email liên hệ không đúng định dạng.';
+  }
+  return '';
+}
+
 function PartnersJobsPage() {
   const [activeTab, setActiveTab] = useState('partners');
   const [loading, setLoading] = useState(false);
@@ -318,6 +387,12 @@ function PartnersJobsPage() {
   const handleCreatePartner = async (event) => {
     event.preventDefault();
 
+    const validationMessage = validatePartnerForm(partnerForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       await partnerService.createPartner({
         ...partnerForm,
@@ -353,6 +428,12 @@ function PartnersJobsPage() {
       return;
     }
 
+    const validationMessage = validateContactForm(contactForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
     try {
       await partnerService.createContact(selectedPartnerId, {
         ...contactForm,
@@ -369,8 +450,9 @@ function PartnersJobsPage() {
   const handleCreateJob = async (event) => {
     event.preventDefault();
 
-    if (!jobForm.partner_id) {
-      toast.error('Cần chọn đối tác.');
+    const validationMessage = validateJobForm(jobForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
 
@@ -431,6 +513,12 @@ function PartnersJobsPage() {
 
     if (!selectedJobDetail?.id) {
       toast.error('Không tìm thấy đơn hàng cần cập nhật.');
+      return;
+    }
+
+    const validationMessage = validateJobForm(jobEditForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
 
@@ -596,7 +684,11 @@ function PartnersJobsPage() {
                 Điện thoại
                 <input
                   value={partnerForm.phone}
-                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))}
+                  inputMode="numeric"
+                  pattern="0\d{9}"
+                  maxLength={10}
+                  placeholder="0901234567"
                 />
               </label>
               <label>
@@ -746,8 +838,12 @@ function PartnersJobsPage() {
                 <input
                   value={contactForm.contact_phone}
                   onChange={(e) =>
-                    setContactForm((prev) => ({ ...prev, contact_phone: e.target.value }))
+                    setContactForm((prev) => ({ ...prev, contact_phone: digitsOnly(e.target.value, 10) }))
                   }
+                  inputMode="numeric"
+                  pattern="0\d{9}"
+                  maxLength={10}
+                  placeholder="0901234567"
                 />
               </label>
               <label>
@@ -863,6 +959,7 @@ function PartnersJobsPage() {
                 <input
                   required
                   type="date"
+                  min={getTodayDateInput()}
                   value={jobForm.deadline}
                   onChange={(e) => setJobForm((prev) => ({ ...prev, deadline: e.target.value }))}
                 />
@@ -884,6 +981,7 @@ function PartnersJobsPage() {
                 Tuổi tối thiểu
                 <input
                   type="number"
+                  min="0"
                   value={jobForm.req_age_min}
                   onChange={(e) => setJobForm((prev) => ({ ...prev, req_age_min: e.target.value }))}
                 />
@@ -892,6 +990,7 @@ function PartnersJobsPage() {
                 Tuổi tối đa
                 <input
                   type="number"
+                  min="0"
                   value={jobForm.req_age_max}
                   onChange={(e) => setJobForm((prev) => ({ ...prev, req_age_max: e.target.value }))}
                 />
@@ -1430,6 +1529,7 @@ function PartnersJobsPage() {
               <input
                 required
                 type="date"
+                min={getTodayDateInput()}
                 value={jobEditForm.deadline}
                 onChange={(e) => setJobEditForm((prev) => ({ ...prev, deadline: e.target.value }))}
               />
@@ -1451,6 +1551,7 @@ function PartnersJobsPage() {
               Tuổi tối thiểu
               <input
                 type="number"
+                min="0"
                 value={jobEditForm.req_age_min}
                 onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_age_min: e.target.value }))}
               />
@@ -1459,6 +1560,7 @@ function PartnersJobsPage() {
               Tuổi tối đa
               <input
                 type="number"
+                min="0"
                 value={jobEditForm.req_age_max}
                 onChange={(e) => setJobEditForm((prev) => ({ ...prev, req_age_max: e.target.value }))}
               />

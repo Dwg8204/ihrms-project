@@ -54,6 +54,20 @@ function validateStartDateAfterToday(value) {
   }
 }
 
+function validateEndDateNotBeforeStart(startValue, endValue) {
+  if (!endValue) return;
+
+  const endDate = normalizeDateOnly(endValue);
+  if (!endDate) {
+    throw createHttpError('end_date must be a valid date', 400);
+  }
+
+  const startDate = normalizeDateOnly(startValue);
+  if (startDate && endDate < startDate) {
+    throw createHttpError('end_date must be on or after start_date', 400);
+  }
+}
+
 async function validateTeacher(teacherId, classType) {
   const teacher = await Teacher.findById(teacherId);
   if (!teacher) {
@@ -83,6 +97,7 @@ const classController = {
       validateClassStatus(status);
 
       validateStartDateAfterToday(req.body.start_date);
+      validateEndDateNotBeforeStart(req.body.start_date, req.body.end_date);
 
       if (Number.isNaN(teacher_id) || teacher_id <= 0) {
         return next(createHttpError('teacher_id is required and must be a positive integer', 400));
@@ -164,6 +179,10 @@ const classController = {
       }
 
       const payload = {};
+      const currentClass = await ClassModel.findById(id);
+      if (!currentClass) {
+        return next(createHttpError('Class not found', 404));
+      }
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'class_name')) {
         const class_name = String(req.body.class_name || '').trim();
@@ -202,6 +221,14 @@ const classController = {
         payload.end_date = req.body.end_date || null;
       }
 
+      const nextStartDate = Object.prototype.hasOwnProperty.call(payload, 'start_date')
+        ? payload.start_date
+        : currentClass.start_date;
+      const nextEndDate = Object.prototype.hasOwnProperty.call(payload, 'end_date')
+        ? payload.end_date
+        : currentClass.end_date;
+      validateEndDateNotBeforeStart(nextStartDate, nextEndDate);
+
       if (Object.prototype.hasOwnProperty.call(req.body, 'status')) {
         const status = normalizeEnum(req.body.status);
         validateClassStatus(status);
@@ -209,13 +236,8 @@ const classController = {
       }
 
       if (payload.teacher_id || payload.class_type) {
-        const targetClass = await ClassModel.findById(id);
-        if (!targetClass) {
-          return next(createHttpError('Class not found', 404));
-        }
-
-        const nextClassType = payload.class_type || targetClass.class_type;
-        const nextTeacherId = payload.teacher_id || targetClass.teacher_id;
+        const nextClassType = payload.class_type || currentClass.class_type;
+        const nextTeacherId = payload.teacher_id || currentClass.teacher_id;
         await validateTeacher(nextTeacherId, nextClassType);
       }
 

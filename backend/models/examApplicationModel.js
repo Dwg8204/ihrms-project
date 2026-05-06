@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { JOB_ORDER_STATUSES } = require('../utils/jobOrderStatus');
+const { isFutureDateTime } = require('../utils/inputValidation');
 
 const EXAM_RESULT_STATUSES = Object.freeze({
     PASS: 'Pass',
@@ -9,6 +10,12 @@ const EXAM_RESULT_STATUSES = Object.freeze({
 });
 
 class ExamApplication {
+    static assertFutureExamDate(examDate) {
+        if (!examDate || !isFutureDateTime(examDate)) {
+            throw new Error('exam_date must be a valid future date/time.');
+        }
+    }
+
     static buildSessionKey(timestamp, jobOrderId) {
         return `${timestamp}_${jobOrderId}`;
     }
@@ -28,6 +35,8 @@ class ExamApplication {
     static async create(examAppData) {
         const { candidate_id, job_order_id, exam_date, note } = examAppData;
         try {
+            this.assertFutureExamDate(exam_date);
+
             // Xác thực sự tồn tại của ứng viên và trạng thái cho phép khớp
             const [candidate] = await db.query('SELECT id, status FROM candidates WHERE id = ?', [candidate_id]);
             if (candidate.length === 0) {
@@ -378,6 +387,7 @@ class ExamApplication {
         if (Number.isNaN(examDate.getTime())) {
             throw new Error('exam_date is invalid.');
         }
+        this.assertFutureExamDate(exam_date);
 
         const [result] = await db.query(
             'UPDATE exam_applications SET exam_date = ? WHERE id = ?',
@@ -398,6 +408,7 @@ class ExamApplication {
         if (Number.isNaN(parsedDate.getTime())) {
             throw new Error('exam_date is invalid.');
         }
+        this.assertFutureExamDate(exam_date);
 
         const [statsRows] = await db.query(
             `
@@ -455,6 +466,7 @@ class ExamApplication {
         if (Number.isNaN(parsedDate.getTime())) {
             throw new Error('exam_date is invalid.');
         }
+        this.assertFutureExamDate(exam_date);
 
         const placeholders = appIds.map(() => '?').join(',');
         const [rows] = await db.query(

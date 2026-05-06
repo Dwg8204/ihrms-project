@@ -1,11 +1,36 @@
 const Partner = require('../models/partnerModel');
 const PartnerContact = require('../models/partnerContactModel');
 const { isValidPartnerStatus, PARTNER_STATUSES } = require('../utils/partnerStatus');
+const {
+  normalizePhoneNumber,
+  isValidVietnamesePhoneNumber,
+  normalizeEmail,
+  isValidEmail
+} = require('../utils/inputValidation');
+
+function validateOptionalPhoneAndEmail(phone, email) {
+  const normalizedPhone = normalizePhoneNumber(phone);
+  const normalizedEmail = normalizeEmail(email);
+
+  if (normalizedPhone && !isValidVietnamesePhoneNumber(normalizedPhone)) {
+    throw new Error('Phone must be a valid Vietnamese phone number with exactly 10 digits.');
+  }
+
+  if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+    throw new Error('Email is invalid.');
+  }
+
+  return {
+    phone: normalizedPhone,
+    email: normalizedEmail
+  };
+}
 
 // --- Partner CRUD ---
 exports.createPartner = async (req, res, next) => {
   try {
     const { name, country, contact_person, phone, email, status, reputation_score } = req.body;
+    const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
     if (!name) {
@@ -18,9 +43,12 @@ exports.createPartner = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Reputation score must be between 1 and 10.' });
     }
 
-    const newPartner = await Partner.create({ name, country, contact_person, phone, email, status, reputation_score });
+    const newPartner = await Partner.create({ name, country, contact_person, phone: normalized.phone, email: normalized.email, status, reputation_score });
     res.status(201).json({ success: true, data: newPartner });
   } catch (error) {
+    if (error.message.includes('Phone must') || error.message.includes('Email is invalid')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.message.includes('Partner name already exists')) {
       return res.status(409).json({ success: false, message: error.message });
     }
@@ -54,6 +82,7 @@ exports.updatePartner = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, country, contact_person, phone, email, status, reputation_score } = req.body;
+    const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
     if (status && !isValidPartnerStatus(status)) {
@@ -63,7 +92,7 @@ exports.updatePartner = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Reputation score must be between 1 and 10.' });
     }
 
-    const updatedPartner = await Partner.update(id, { name, country, contact_person, phone, email, status, reputation_score });
+    const updatedPartner = await Partner.update(id, { name, country, contact_person, phone: normalized.phone, email: normalized.email, status, reputation_score });
     
     if (!updatedPartner) {
       return res.status(404).json({ success: false, message: 'Partner not found.' });
@@ -76,6 +105,9 @@ exports.updatePartner = async (req, res, next) => {
 
     res.status(200).json({ success: true, data: updatedPartner });
   } catch (error) {
+    if (error.message.includes('Phone must') || error.message.includes('Email is invalid')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.message.includes('Partner name already exists')) {
       return res.status(409).json({ success: false, message: error.message });
     }
@@ -104,16 +136,20 @@ exports.createPartnerContact = async (req, res, next) => {
   try {
     const { partnerId } = req.params;
     const { contact_name, contact_phone, contact_email, contact_role, is_primary } = req.body;
+    const normalized = validateOptionalPhoneAndEmail(contact_phone, contact_email);
 
     if (!contact_name) {
       return res.status(400).json({ success: false, message: 'Contact name is required.' });
     }
 
-    const newContact = await PartnerContact.create(partnerId, { contact_name, contact_phone, contact_email, contact_role, is_primary });
+    const newContact = await PartnerContact.create(partnerId, { contact_name, contact_phone: normalized.phone, contact_email: normalized.email, contact_role, is_primary });
     res.status(201).json({ success: true, data: newContact });
   } catch (error) {
     if (error.message.includes('Partner not found')) {
       return res.status(404).json({ success: false, message: error.message });
+    }
+    if (error.message.includes('Phone must') || error.message.includes('Email is invalid')) {
+      return res.status(400).json({ success: false, message: error.message });
     }
     if (error.message.includes('Maximum')) {
       return res.status(400).json({ success: false, message: error.message });
@@ -155,13 +191,17 @@ exports.updatePartnerContact = async (req, res, next) => {
   try {
     const { id, partnerId } = req.params;
     const { contact_name, contact_phone, contact_email, contact_role, is_primary } = req.body;
+    const normalized = validateOptionalPhoneAndEmail(contact_phone, contact_email);
 
-    const updatedContact = await PartnerContact.update(id, partnerId, { contact_name, contact_phone, contact_email, contact_role, is_primary });
+    const updatedContact = await PartnerContact.update(id, partnerId, { contact_name, contact_phone: normalized.phone, contact_email: normalized.email, contact_role, is_primary });
     if (!updatedContact) {
       return res.status(404).json({ success: false, message: 'Contact not found or does not belong to this partner.' });
     }
     res.status(200).json({ success: true, data: updatedContact });
   } catch (error) {
+    if (error.message.includes('Phone must') || error.message.includes('Email is invalid')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.message.includes('Duplicate entry')) {
         return res.status(409).json({ success: false, message: 'Contact name already exists for this partner.' });
     }

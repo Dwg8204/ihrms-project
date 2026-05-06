@@ -3,6 +3,15 @@ const RecruitmentSource = require('../models/recruitmentSourceModel');
 const DocumentModel = require('../models/documentModel');
 const EducationLevel = require('../models/educationLevelModel');
 const PaymentSchedule = require('../models/paymentScheduleModel');
+const {
+  normalizePhoneNumber,
+  isValidVietnamesePhoneNumber,
+  normalizeEmail,
+  isValidEmail,
+  normalizeGender,
+  isValidCandidateGender,
+  isPastDateOnly
+} = require('../utils/inputValidation');
 
 const {
   CANDIDATE_STATUSES,
@@ -129,6 +138,53 @@ function validateCitizenIdRequired(citizenId) {
   }
 }
 
+function validateCandidateFieldValues(payload) {
+  if (payload.phone !== undefined) {
+    payload.phone = normalizePhoneNumber(payload.phone);
+    if (payload.phone && !isValidVietnamesePhoneNumber(payload.phone)) {
+      throw createHttpError('phone must be a valid Vietnamese phone number with exactly 10 digits', 400);
+    }
+  }
+
+  if (payload.email !== undefined) {
+    payload.email = normalizeEmail(payload.email);
+    if (payload.email && !isValidEmail(payload.email)) {
+      throw createHttpError('email is invalid', 400);
+    }
+  }
+
+  if (payload.gender !== undefined) {
+    payload.gender = normalizeGender(payload.gender);
+    if (payload.gender && !isValidCandidateGender(payload.gender)) {
+      throw createHttpError('gender must be Nam or Nữ', 400);
+    }
+  }
+
+  if (payload.dob !== undefined) {
+    if (payload.dob === null || payload.dob === '') {
+      payload.dob = null;
+    } else if (!isPastDateOnly(payload.dob)) {
+      throw createHttpError('dob must be a valid date before today', 400);
+    }
+  }
+
+  if (payload.height !== undefined && payload.height !== null) {
+    if (payload.height <= 0 || payload.height > 250) {
+      throw createHttpError('height must be greater than 0 and less than or equal to 250', 400);
+    }
+  }
+
+  if (payload.weight !== undefined && payload.weight !== null) {
+    if (payload.weight <= 0 || payload.weight > 300) {
+      throw createHttpError('weight must be greater than 0 and less than or equal to 300', 400);
+    }
+  }
+
+  if (payload.fee0_paid_amount !== undefined && payload.fee0_paid_amount !== null && payload.fee0_paid_amount < 0) {
+    throw createHttpError('fee0_paid_amount cannot be negative', 400);
+  }
+}
+
 async function validateCitizenIdUnique(citizenId, excludeCandidateId = null) {
   const existing = await Candidate.getByCitizenId(citizenId);
   if (!existing) return;
@@ -219,6 +275,7 @@ const candidateController = {
 
       await validateSourceMandatory(payload.source_id);
       await validateEducationLevelOptional(payload.education_level);
+      validateCandidateFieldValues(payload);
 
       if (Number.isNaN(payload.height)) {
         return next(createHttpError('Invalid height', 400));
@@ -309,6 +366,8 @@ const candidateController = {
       if (payload.education_level !== undefined) {
         await validateEducationLevelOptional(payload.education_level);
       }
+
+      validateCandidateFieldValues(payload);
 
       if (Number.isNaN(payload.height)) {
         return next(createHttpError('Invalid height', 400));

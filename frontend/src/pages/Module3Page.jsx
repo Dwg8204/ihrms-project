@@ -10,6 +10,7 @@ import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from "../utils/constants"
 import { formatDate, formatDateTime } from "../utils/format";
 import { getErrorMessage } from "../utils/toast";
 import { useI18n } from "../i18n/I18nProvider";
+import { getCurrentDateTimeLocal, isFutureDateTimeInput } from "../utils/validation";
 
 const STORAGE_TRAINING_KEY = "ihrms_m3_training_records";
 
@@ -310,6 +311,11 @@ function Module3Page() {
       return;
     }
 
+    if (!isFutureDateTimeInput(examForm.examDate)) {
+      toast.error("Ngày thi phải sau thời điểm hiện tại.");
+      return;
+    }
+
     try {
       await examApplicationService.bulkScheduleSession({
         job_order_id: Number(examForm.jobOrderId),
@@ -367,6 +373,11 @@ function Module3Page() {
     if (!selectedScheduleSessionKey) return;
     if (!sessionDateDraft) {
       toast.error("Vui lòng chọn ngày giờ ca thi.");
+      return;
+    }
+
+    if (!isFutureDateTimeInput(sessionDateDraft)) {
+      toast.error("Ngày giờ ca thi phải sau thời điểm hiện tại.");
       return;
     }
 
@@ -632,6 +643,7 @@ function Module3Page() {
                 <input
                   type="datetime-local"
                   value={examForm.examDate}
+                  min={getCurrentDateTimeLocal()}
                   onChange={(e) => setExamForm((prev) => ({ ...prev, examDate: e.target.value }))}
                 />
               </label>
@@ -918,6 +930,7 @@ function Module3Page() {
                   <input
                     type="datetime-local"
                     value={sessionDateDraft}
+                    min={getCurrentDateTimeLocal()}
                     onChange={(e) => setSessionDateDraft(e.target.value)}
                   />
                 </label>

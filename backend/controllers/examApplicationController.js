@@ -3,6 +3,13 @@ const Candidate = require('../models/candidateModel');
 const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
 const db = require('../config/db');
 const { autoSendExamResultEmail } = require('./emailController');
+const { isFutureDateTime } = require('../utils/inputValidation');
+
+function validateFutureExamDate(examDate) {
+    if (!examDate || !isFutureDateTime(examDate)) {
+        throw new Error('exam_date must be a valid future date/time.');
+    }
+}
 
 exports.createExamApplication = async (req, res, next) => {
     try {
@@ -11,6 +18,8 @@ exports.createExamApplication = async (req, res, next) => {
         if (!candidate_id || !job_order_id || !exam_date) {
             return res.status(400).json({ success: false, message: 'Candidate ID, Job Order ID, and Exam Date are required.' });
         }
+
+        validateFutureExamDate(exam_date);
 
         // Tạo đơn đăng ký thi
         const newExamApp = await ExamApplication.create({ candidate_id, job_order_id, exam_date, note });
@@ -180,6 +189,8 @@ exports.updateExamSchedule = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'exam_date is required.' });
         }
 
+        validateFutureExamDate(exam_date);
+
         const updated = await ExamApplication.updateSchedule(id, { exam_date });
         if (!updated) {
             return res.status(500).json({ success: false, message: 'Failed to update exam schedule.' });
@@ -207,6 +218,8 @@ exports.updateExamSession = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'exam_date is required.' });
         }
 
+        validateFutureExamDate(exam_date);
+
         const updated = await ExamApplication.updateSessionSchedule(sessionKey, exam_date);
         const refreshed = await ExamApplication.findSessionDetail(updated.sessionKey);
 
@@ -231,6 +244,8 @@ exports.updateExamSession = async (req, res, next) => {
 exports.bulkScheduleSession = async (req, res, next) => {
     try {
         const { job_order_id, exam_application_ids, exam_date } = req.body;
+
+        validateFutureExamDate(exam_date);
 
         const result = await ExamApplication.bulkScheduleSession({
             job_order_id,

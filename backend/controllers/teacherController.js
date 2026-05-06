@@ -1,4 +1,10 @@
 const { Teacher, TEACHER_TYPES, EMPLOYMENT_TYPES, TEACHER_STATUSES } = require('../models/teacherModel');
+const {
+  normalizePhoneNumber,
+  isValidVietnamesePhoneNumber,
+  normalizeEmail,
+  isValidEmail
+} = require('../utils/inputValidation');
 
 function createHttpError(message, statusCode) {
   const error = new Error(message);
@@ -37,6 +43,18 @@ function validateTeacherStatus(value) {
   }
 }
 
+function normalizeTeacherContacts(payload) {
+  payload.phone = normalizePhoneNumber(payload.phone);
+  if (payload.phone && !isValidVietnamesePhoneNumber(payload.phone)) {
+    throw createHttpError('phone must be a valid Vietnamese phone number with exactly 10 digits', 400);
+  }
+
+  payload.email = normalizeEmail(payload.email);
+  if (payload.email && !isValidEmail(payload.email)) {
+    throw createHttpError('email is invalid', 400);
+  }
+}
+
 const teacherController = {
   createTeacher: async (req, res, next) => {
     try {
@@ -53,14 +71,18 @@ const teacherController = {
       validateEmploymentType(employment_type);
       validateTeacherStatus(status);
 
-      const newTeacher = await Teacher.create({
+      const payload = {
         full_name,
         phone: req.body.phone || null,
         email: req.body.email || null,
         teacher_type,
         employment_type,
         status
-      });
+      };
+
+      normalizeTeacherContacts(payload);
+
+      const newTeacher = await Teacher.create(payload);
 
       res.status(201).json({ success: true, data: newTeacher });
     } catch (error) {
@@ -127,6 +149,10 @@ const teacherController = {
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
         payload.email = req.body.email || null;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'phone') || Object.prototype.hasOwnProperty.call(req.body, 'email')) {
+        normalizeTeacherContacts(payload);
       }
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'teacher_type')) {
