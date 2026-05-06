@@ -73,7 +73,9 @@ class JobOrder {
   }
 
   static async findAll(page = 1, limit = 20, search = '', partner_id = null, status = '') {
-    const offset = (page - 1) * limit;
+    const validPage = Math.max(1, parseInt(page) || 1);
+    const validLimit = Math.max(1, parseInt(limit) || 20);
+    const offset = (validPage - 1) * validLimit;
     let query = `
       SELECT
         jo.*,
@@ -111,7 +113,7 @@ class JobOrder {
     }
 
     query += ' ORDER BY jo.deadline ASC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
+    params.push(validLimit, offset);
 
     try {
       const [jobOrders] = await db.query(query, params);

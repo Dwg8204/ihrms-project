@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { CONTRACT_STATUSES, canTransitionContractStatus } = require('../utils/contractStatus');
+const PaymentSchedule = require('./paymentScheduleModel');
 
 class Contract {
   static async _generateContractNumber() {
@@ -73,7 +74,19 @@ class Contract {
           document_url, contract_details_json
         ]
       );
-      return { id: result.insertId, ...contractData, contract_number, status };
+      const newContractId = result.insertId;
+
+      // --- LOGIC TÀI CHÍNH & TRẠNG THÁI ---
+      if (status === 'SIGNED') {
+        const Candidate = require('./candidateModel');
+        const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
+        const PaymentSchedule = require('./paymentScheduleModel');
+
+        await Candidate.transitionStatus(candidate_id, CANDIDATE_STATUSES.CONTRACT_SIGNED);
+        await PaymentSchedule.generatePaymentSchedulesForContract(newContractId);
+      }
+
+      return { id: newContractId, ...contractData, contract_number, status };
     } catch (error) {
       throw error;
     }
@@ -228,6 +241,19 @@ class Contract {
       if (result.affectedRows === 0) {
         return null; // Không tìm thấy hợp đồng
       }
+
+      // --- LOGIC TÀI CHÍNH & TRẠNG THÁI (Module 1 & 5) ---
+      // Nếu trạng thái chuyển thành SIGNED, tự động sinh lịch thanh toán và cập nhật trạng thái ứng viên
+      if (status === CONTRACT_STATUSES.SIGNED && currentContract.status !== CONTRACT_STATUSES.SIGNED) {
+        // Cập nhật trạng thái ứng viên trước
+        const Candidate = require('./candidateModel');
+        const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
+        await Candidate.transitionStatus(currentContract.candidate_id, CANDIDATE_STATUSES.CONTRACT_SIGNED);
+
+        // Sau đó sinh lịch thanh toán
+        await PaymentSchedule.generatePaymentSchedulesForContract(id);
+      }
+
       return { id, ...contractData };
     } catch (error) {
       throw error;

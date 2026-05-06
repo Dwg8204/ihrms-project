@@ -45,8 +45,8 @@ export const recruitmentService = {
     return data;
   },
 
-  updateCandidateStatus: async (id, status) => {
-    const { data } = await api.patch(`/candidates/${id}/status`, { status });
+  updateCandidateStatus: async (id, status, extraPayload = {}) => {
+    const { data } = await api.patch(`/candidates/${id}/status`, { status, ...extraPayload });
     return data;
   },
 

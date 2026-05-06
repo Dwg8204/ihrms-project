@@ -370,7 +370,7 @@ function DocumentsPage() {
     <section className="page-grid">
       <div className="surface">
         <SectionHeader
-          title="M6. Quản lý hồ sơ và thủ tục xuất cảnh"
+          title="Quản lý hồ sơ và thủ tục xuất cảnh"
           subtitle="Quản lý checklist giấy tờ, điều kiện trước thi và cảnh báo tiến độ."
           action={
             <button className="btn ghost" type="button" onClick={reloadCurrent}>
@@ -378,7 +378,7 @@ function DocumentsPage() {
             </button>
           }
         />
-        {loading ? <p className="muted">Đang tải dữ liệu M6...</p> : null}
+        {loading ? <p className="muted">Đang tải dữ liệu ...</p> : null}
 
         <div className="m6-toolbar">
           <div className="m6-toolbar__filters">
