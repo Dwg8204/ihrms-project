@@ -9,12 +9,15 @@ export const financeService = {
   deleteFeeStandard: (id) => http.delete(`/fee-standards/${id}`).then(res => res.data),
 
   // Transactions
+  getAllTransactions: (params) => http.get('/transactions', { params }).then(res => res.data),
   getTransactionsByCandidate: (candidateId, params) => 
     http.get(`/transactions/candidate/${candidateId}`, { params }).then(res => res.data),
   recordIncome: (data) => http.post("/transactions/income", data).then(res => res.data),
   recordRefund: (data) => http.post("/transactions/refund", data).then(res => res.data),
 
   // Payment Schedules
+  createPaymentSchedule: (data) =>
+    http.post('/payment-schedules', data).then(res => res.data),
   getPaymentSchedulesByCandidate: (candidateId) => 
     http.get(`/payment-schedules/candidate/${candidateId}`).then(res => res.data),
   recordPayment: (scheduleId, data) => 

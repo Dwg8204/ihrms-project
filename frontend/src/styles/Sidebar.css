@@ -18,11 +18,11 @@
 
 .app-sidebar .sidebar__toggle {
   position: absolute;
-  top: 22px;
-  right: -16px;
+  top: 16px;
+  right: 8px;
   z-index: 4;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #d9dbe8;
   border-radius: 999px;
   background: #fafaff;
@@ -30,15 +30,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(182, 188, 210, 0.22);
+  box-shadow: 0 4px 10px rgba(182, 188, 210, 0.2);
   cursor: pointer;
   transition: color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .app-sidebar .sidebar__toggle:hover {
   color: #747b95;
-  transform: translateX(-1px);
-  box-shadow: 0 8px 18px rgba(182, 188, 210, 0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(182, 188, 210, 0.26);
 }
 
 .app-sidebar .sidebar__rail {
@@ -86,16 +86,16 @@
 }
 
 .app-sidebar .sidebar__section-label {
-  color: #c4c9d8;
+  color: #8b93ad;
   font-size: 11px;
   line-height: 1;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .app-sidebar .sidebar__section-action {
-  color: #c3c8d9;
+  color: #9aa2bc;
   display: inline-flex;
   align-items: center;
 }

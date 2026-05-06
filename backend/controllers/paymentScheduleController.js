@@ -1,5 +1,31 @@
 const PaymentSchedule = require('../models/paymentScheduleModel');
 
+exports.createPaymentSchedule = async (req, res) => {
+  try {
+    const {
+      candidate_id, description, amount_due, due_date,
+      is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event
+    } = req.body;
+    if (!candidate_id || !description || !amount_due) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc.' });
+    }
+    const schedule = await PaymentSchedule.create({
+      candidate_id,
+      description,
+      amount_due,
+      due_date: due_date || null,
+      status: 'PENDING',
+      is_mandatory_for_exit: is_mandatory_for_exit || false,
+      is_refundable: is_refundable || false,
+      refund_policy_pct: refund_policy_pct || 0,
+      triggered_by_event: triggered_by_event || 'MANUAL'
+    });
+    res.status(201).json({ success: true, data: schedule, message: 'Đã tạo khoản phí thành công.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.getPaymentSchedulesByCandidate = async (req, res) => {
   try {
     const schedules = await PaymentSchedule.findByCandidate(req.params.candidateId);

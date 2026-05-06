@@ -17,6 +17,7 @@ const classRoutes = require('./routes/classRoutes');
 const feeStandardRoutes = require('./routes/feeStandardRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const paymentScheduleRoutes = require('./routes/paymentScheduleRoutes');
+const authRoutes = require('./routes/authRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const cron = require('node-cron');
 const JobOrder = require('./models/jobOrderModel');
@@ -38,6 +39,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/recruitment-sources', recruitmentSourceRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api', documentRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/job-orders', jobOrderRoutes);

@@ -472,7 +472,7 @@ function Module4Page() {
                             type="button"
                             className="btn small danger"
                             onClick={() => handleHardDelete(contract.id)}
-                            style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#ef4444" }}
+                            style={{ backgroundColor: "#ef4444", color: "#ffffff" }}
                           >
                             Xóa vĩnh viễn
                           </button>
@@ -559,7 +559,7 @@ function Module4Page() {
                           type="button"
                           className="btn small danger"
                           onClick={() => handleDeleteTemplate(tmpl.id)}
-                          style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#ef4444" }}
+                          style={{ backgroundColor: "#ef4444", color: "#ffffff" }}
                         >
                           Xóa
                         </button>

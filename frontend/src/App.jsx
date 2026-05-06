@@ -12,6 +12,7 @@ import RoadmapPage from "./pages/RoadmapPage";
 import FinancePage from "./pages/FinancePage";
 import ChatPage from "./pages/ChatPage";
 import EmailPage from "./pages/EmailPage";
+import LoginPage from "./pages/LoginPage";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "./i18n/I18nProvider";
 
@@ -25,7 +26,7 @@ const defaultCustomizer = {
   language: "vietnamese",
 };
 
-function AppLayout({ customizer, setCustomizer }) {
+function AppLayout({ customizer, setCustomizer, authUser, onLogout }) {
   useEffect(() => {
     document.documentElement.setAttribute("dir", customizer.direction);
   }, [customizer.direction]);
@@ -46,8 +47,9 @@ function AppLayout({ customizer, setCustomizer }) {
   const layoutStyle = useMemo(
     () => ({
       display: "flex",
-      minHeight: "calc(100vh - 72px)",
+      height: "calc(100vh - 72px)",
       minWidth: 0,
+      overflow: "hidden",
     }),
     []
   );
@@ -65,6 +67,8 @@ function AppLayout({ customizer, setCustomizer }) {
       minWidth: 0,
       minHeight: 0,
       padding: densityPadding,
+      overflowY: "auto",
+      overscrollBehavior: "contain",
       maxWidth: customizer.container === "boxed" ? "1320px" : "none",
       margin: customizer.container === "boxed" ? "0 auto" : "0",
       width: "100%",
@@ -79,7 +83,7 @@ function AppLayout({ customizer, setCustomizer }) {
     >
       <Header customizer={customizer} setCustomizer={setCustomizer} />
       <div style={layoutStyle}>
-        {customizer.layout === "sidebar" ? <Sidebar /> : null}
+        {customizer.layout === "sidebar" ? <Sidebar user={authUser} onLogout={onLogout} /> : null}
         <main style={mainStyle}>
           <Outlet />
         </main>
@@ -90,10 +94,24 @@ function AppLayout({ customizer, setCustomizer }) {
 
 function App() {
   const { language, setLanguage } = useI18n();
+  const [auth, setAuth] = useState(() => {
+    const raw = localStorage.getItem("ihrms_admin_auth");
+    return raw ? JSON.parse(raw) : null;
+  });
   const [customizer, setCustomizer] = useState(() => ({
     ...defaultCustomizer,
     language,
   }));
+
+  const handleLogin = (authData) => {
+    localStorage.setItem("ihrms_admin_auth", JSON.stringify(authData));
+    setAuth(authData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("ihrms_admin_auth");
+    setAuth(null);
+  };
 
   useEffect(() => {
     setLanguage(customizer.language);
@@ -101,7 +119,8 @@ function App() {
 
   return (
     <Routes>
-      <Route element={<AppLayout customizer={customizer} setCustomizer={setCustomizer} />}>
+      <Route path="/login" element={auth ? <Navigate replace to="/" /> : <LoginPage onLogin={handleLogin} />} />
+      <Route element={auth ? <AppLayout customizer={customizer} setCustomizer={setCustomizer} authUser={auth?.user} onLogout={handleLogout} /> : <Navigate replace to="/login" />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/module-1" element={<RecruitmentPage />} />
         <Route path="/module-2" element={<PartnersJobsPage />} />

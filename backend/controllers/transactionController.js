@@ -24,6 +24,19 @@ exports.recordRefund = async (req, res) => {
   }
 };
 
+exports.getAllTransactions = async (req, res) => {
+  try {
+    const { page = 1, limit = 100, transaction_type, date_from, date_to, candidate_name } = req.query;
+    const [data, summary] = await Promise.all([
+      Transaction.findAll({ page, limit, transaction_type, date_from, date_to, candidate_name }),
+      Transaction.getGlobalSummary({ date_from, date_to })
+    ]);
+    res.status(200).json({ success: true, data, summary });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.getTransactionsByCandidate = async (req, res) => {
   try {
     const { candidateId } = req.params;

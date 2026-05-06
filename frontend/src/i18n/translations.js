@@ -131,7 +131,7 @@ export const translations = {
       },
     },
     module3: {
-      title: "Không gian làm việc M3",
+      title: "Lịch thi & Đào tạo",
       subtitle: "Quản lý lịch thi, đào tạo và theo dõi công việc trong một nơi.",
       tabExamList: "Danh sách thi",
       tabExamResult: "Kết quả thi",

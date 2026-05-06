@@ -158,6 +158,13 @@ function RecruitmentPage() {
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundNote, setRefundNote] = useState("");
 
+  // Add schedule manually
+  const [addScheduleModalOpen, setAddScheduleModalOpen] = useState(false);
+  const [addScheduleForm, setAddScheduleForm] = useState({
+    description: '', amount_due: 0, due_date: '', is_mandatory_for_exit: 0,
+    is_refundable: 0, refund_policy_pct: 0, triggered_by_event: 'MANUAL'
+  });
+
   const tabs = [
     { key: 'intake', label: 'Thêm ứng viên' },
     { key: 'source', label: 'Nguồn tuyển dụng' },
@@ -584,6 +591,27 @@ function RecruitmentPage() {
       showSuccess('Đã cập nhật trạng thái ứng viên.');
     } catch (err) {
       showError(err);
+    }
+  };
+
+  const handleAddScheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (!candidateDetail) return;
+    try {
+      setUpdating(true);
+      await financeService.createPaymentSchedule({
+        ...addScheduleForm,
+        candidate_id: candidateDetail.id,
+        amount_due: Number(addScheduleForm.amount_due),
+      });
+      showSuccess('Đã thêm khoản phí mới.');
+      setAddScheduleModalOpen(false);
+      setAddScheduleForm({ description: '', amount_due: 0, due_date: '', is_mandatory_for_exit: 0, is_refundable: 0, refund_policy_pct: 0, triggered_by_event: 'MANUAL' });
+      loadFinancialData(candidateDetail.id);
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -1586,6 +1614,7 @@ function RecruitmentPage() {
                  </div>
 
                  <div className="row-actions" style={{ marginBottom: "10px", justifyContent: "flex-end" }}>
+                    <button className="btn small ghost" onClick={() => setAddScheduleModalOpen(true)}>+ Thêm khoản phí</button>
                     {candidateDetail?.status !== 'WITHDRAWN' && candidateDetail?.status !== 'FAILED_POOL' ? (
                        <button className="btn small" onClick={handlePayAll} disabled={!paymentSchedules.some(s => s.balance > 0 && s.status !== 'CANCELLED')}>Đóng tất cả phí nợ</button>
                     ) : (
@@ -1756,6 +1785,78 @@ function RecruitmentPage() {
           <div className="field-span-2 row-actions" style={{ marginTop: "10px" }}>
             <button type="submit" className="btn danger">Xác nhận hoàn tiền</button>
             <button type="button" className="btn ghost" onClick={() => setRefundModalOpen(false)}>Hủy</button>
+          </div>
+        </form>
+      </DetailModal>
+
+      <DetailModal
+        open={addScheduleModalOpen}
+        title="Thêm khoản phí thủ công"
+        onClose={() => setAddScheduleModalOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleAddScheduleSubmit}>
+          <label className="field-span-2">
+            Nội dung khoản phí *
+            <input
+              required
+              placeholder="VD: Phí đặt cọc cam kết, Học phí đợt 2..."
+              value={addScheduleForm.description}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, description: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Số tiền (VND) *
+            <input
+              type="number"
+              required
+              min={1}
+              value={addScheduleForm.amount_due}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, amount_due: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Hạn đóng
+            <input
+              type="date"
+              value={addScheduleForm.due_date}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, due_date: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Bắt buộc để xuất cảnh?
+            <select
+              value={addScheduleForm.is_mandatory_for_exit}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, is_mandatory_for_exit: Number(e.target.value) })}
+            >
+              <option value={0}>Không</option>
+              <option value={1}>Có</option>
+            </select>
+          </label>
+          <label className="field-span-1">
+            Có thể hoàn tiền?
+            <select
+              value={addScheduleForm.is_refundable}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, is_refundable: Number(e.target.value) })}
+            >
+              <option value={0}>Không</option>
+              <option value={1}>Có</option>
+            </select>
+          </label>
+          {Number(addScheduleForm.is_refundable) === 1 && (
+            <label className="field-span-2">
+              % Hoàn tiền khi rút hồ sơ
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={addScheduleForm.refund_policy_pct}
+                onChange={e => setAddScheduleForm({ ...addScheduleForm, refund_policy_pct: e.target.value })}
+              />
+            </label>
+          )}
+          <div className="field-span-2 row-actions" style={{ marginTop: "15px" }}>
+            <button type="submit" className="btn">Thêm khoản phí</button>
+            <button type="button" className="btn ghost" onClick={() => setAddScheduleModalOpen(false)}>Hủy</button>
           </div>
         </form>
       </DetailModal>
