@@ -374,8 +374,12 @@ const candidateController = {
         await validatePreExamGate(candidate, nextStatus);
       }
 
-      // await Candidate.updateStatus(id, nextStatus);
-      await Candidate.transitionStatus(id, nextStatus, { jobOrderId: req.body.jobOrderId || null });
+      const withdrawalReason = req.body.withdrawal_reason || req.body.withdrawalReason || null;
+      
+      await Candidate.transitionStatus(id, nextStatus, { 
+        jobOrderId: req.body.jobOrderId || null,
+        withdrawalReason
+      });
       const updated = await Candidate.getById(id);
 
       res.status(200).json({

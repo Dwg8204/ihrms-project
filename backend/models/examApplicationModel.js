@@ -291,9 +291,29 @@ class ExamApplication {
         }
 
         const [result] = await db.query(
-            'UPDATE exam_applications SET result_status = ?, score_details = COALESCE(?, score_details), note = COALESCE(?, note) WHERE id = ?',
+            'UPDATE exam_applications SET result_status = ?, score_details = COALESCE(?, score_details), note = COALESCE(?, note), exam_date = COALESCE(exam_date, NOW()) WHERE id = ?',
             [result_status, scoreDetailsJson, note, id]
         );
+
+        if (result.affectedRows > 0) {
+            // Cập nhật trạng thái ứng viên tương ứng (Module 1 & 5)
+            const Candidate = require('./candidateModel');
+            const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
+            
+            let newCandidateStatus = null;
+            if (result_status === EXAM_RESULT_STATUSES.PASS) {
+                newCandidateStatus = CANDIDATE_STATUSES.PASSED;
+            } else if (result_status === EXAM_RESULT_STATUSES.FAIL) {
+                newCandidateStatus = CANDIDATE_STATUSES.FAILED_POOL;
+            }
+
+            if (newCandidateStatus) {
+                await Candidate.transitionStatus(currentExamApp.candidate_id, newCandidateStatus, { 
+                    jobOrderId: currentExamApp.job_order_id 
+                });
+            }
+        }
+
         return result.affectedRows > 0;
     }
 

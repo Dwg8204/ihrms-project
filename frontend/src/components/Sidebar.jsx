@@ -97,7 +97,7 @@ const LogoutIcon = () => (
   </svg>
 );
 
-function Sidebar() {
+function Sidebar({ user, onLogout }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -146,16 +146,14 @@ function Sidebar() {
             icon: TrendIcon,
             to: "/module-6",
           },
-          {
-            label: "Lao động tại Nhật",
-            icon: MailIcon,
-            to: "/module-7",
-          },
         ],
       },
       {
         label: "Mail",
-        items: [{ label: "Mail", icon: MailIcon, to: "/mail" }],
+        items: [
+          { label: "Mail", icon: MailIcon, to: "/mail" },
+          { label: "AI Trợ lý CEO", icon: TrendIcon, to: "/wizard" },
+        ],
       },
     ],
     []
@@ -165,6 +163,16 @@ function Sidebar() {
     () => menuSections.flatMap((section) => section.items),
     [menuSections]
   );
+
+  const displayName = user?.full_name || "Admin";
+  const roleText = user?.role || t("sidebar.userRole");
+  const avatar = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "AD";
 
   return (
     <aside className={`app-sidebar ${collapsed ? "sidebar--collapsed" : ""}`}>
@@ -233,17 +241,18 @@ function Sidebar() {
       </div>
 
       <div className="sidebar__user">
-        <div className="sidebar__user-avatar">AS</div>
+        <div className="sidebar__user-avatar">{avatar}</div>
         {!collapsed ? (
           <>
             <div className="sidebar__user-info">
-              <div className="sidebar__user-name">Aigars S.</div>
-              <div className="sidebar__user-role">{t("sidebar.userRole")}</div>
+              <div className="sidebar__user-name">{displayName}</div>
+              <div className="sidebar__user-role">{roleText}</div>
             </div>
             <button
               type="button"
               className="sidebar__logout-button"
               aria-label={t("sidebar.logout")}
+              onClick={onLogout}
             >
               <LogoutIcon />
             </button>

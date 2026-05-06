@@ -9,8 +9,15 @@ import { jobOrderService } from '../services/jobOrderService';
 import { examApplicationService } from '../services/examApplicationService';
 import { documentService } from '../services/documentService';
 import { emailService } from '../services/emailService';
-import { CANDIDATE_STATUSES, CANDIDATE_STATUS_LABELS } from '../utils/constants';
-import { formatDate, formatDateTime } from '../utils/format';
+import { financeService } from '../services/financeService';
+import { 
+  CANDIDATE_STATUSES, 
+  CANDIDATE_STATUS_LABELS,
+  PAYMENT_SCHEDULE_STATUS_LABELS,
+  TRANSACTION_TYPE_LABELS,
+  FEE_CATEGORY_LABELS
+} from '../utils/constants';
+import { formatDate, formatDateTime, formatCurrency } from '../utils/format';
 import { getErrorMessage } from '../utils/toast';
 
 const initialCandidateForm = {
@@ -35,7 +42,17 @@ const initialTransitionDraft = {
   status: '',
   jobOrderId: '',
   examDate: '',
-  examApplicationId: ''
+  examApplicationId: '',
+  withdrawal_reason: 'TH3' // Default to Bỏ ngang
+};
+
+const PAYMENT_SCHEDULE_LABELS = {
+  PENDING: 'Chờ thanh toán',
+  PAID: 'Đã đóng đủ',
+  PARTIALLY_PAID: 'Đóng một phần',
+  OVERDUE: 'Quá hạn',
+  CANCELLED: 'Đã hủy',
+  REFUNDED: 'Đã hoàn tiền'
 };
 
 const emptyReadiness = {
@@ -127,6 +144,26 @@ function RecruitmentPage() {
 
   const [candidateDetail, setCandidateDetail] = useState(null);
   const [detailReadiness, setDetailReadiness] = useState(emptyReadiness);
+  const [detailSubTab, setDetailSubTab] = useState('profile'); // profile, documents, finance
+
+  // Finance state
+  const [paymentSchedules, setPaymentSchedules] = useState([]);
+  const [candidateTransactions, setCandidateTransactions] = useState([]);
+  const [isReadyForExit, setIsReadyForExit] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentNote, setPaymentNote] = useState("");
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundNote, setRefundNote] = useState("");
+
+  // Add schedule manually
+  const [addScheduleModalOpen, setAddScheduleModalOpen] = useState(false);
+  const [addScheduleForm, setAddScheduleForm] = useState({
+    description: '', amount_due: 0, due_date: '', is_mandatory_for_exit: 0,
+    is_refundable: 0, refund_policy_pct: 0, triggered_by_event: 'MANUAL'
+  });
 
   const tabs = [
     { key: 'intake', label: 'Thêm ứng viên' },
@@ -194,17 +231,47 @@ function RecruitmentPage() {
     return payload;
   };
 
-  const getTransitionDraft = (candidateId, fallbackStatus = '') =>
-    transitionDrafts[candidateId] || { ...initialTransitionDraft, status: fallbackStatus };
+  const getAvailableTransitions = (currentStatus) => {
+    switch (currentStatus) {
+      case 'NEW_RECEIVED':
+        return ['PAID0_DOCS_SUBMITTED', 'WITHDRAWN'];
+      case 'PAID0_DOCS_SUBMITTED':
+        return ['WAITING_FORM_MATCH', 'WITHDRAWN'];
+      case 'WAITING_FORM_MATCH':
+        return ['FORM_MATCHED_WAITING_EXAM', 'WITHDRAWN'];
+      case 'FORM_MATCHED_WAITING_EXAM':
+      case 'PASSED':
+      case 'FAILED_POOL':
+      case 'CONTRACT_SIGNED':
+        return ['WITHDRAWN'];
+      default:
+        return ['WITHDRAWN'];
+    }
+  };
 
-  const setTransitionDraft = (candidateId, key, value, fallbackStatus = '') => {
-    setTransitionDrafts((prev) => ({
-      ...prev,
-      [candidateId]: {
-        ...getTransitionDraft(candidateId, fallbackStatus),
-        [key]: value
-      }
-    }));
+  const getTransitionDraft = (row) => {
+    const existing = transitionDrafts[row.id];
+    if (existing) return existing;
+    
+    return { 
+      ...initialTransitionDraft, 
+      status: row.status || '', 
+      withdrawal_reason: row.withdrawal_reason || 'TH3'
+    };
+  };
+
+  const setTransitionDraft = (row, key, value) => {
+    setTransitionDrafts((prev) => {
+      const current = prev[row.id] || { 
+        ...initialTransitionDraft, 
+        status: row.status || '', 
+        withdrawal_reason: row.withdrawal_reason || 'TH3'
+      };
+      return {
+        ...prev,
+        [row.id]: { ...current, [key]: value }
+      };
+    });
   };
 
   const loadSources = async () => {
@@ -376,12 +443,31 @@ function RecruitmentPage() {
       ]);
       setCandidateDetail(candidateRes.data || null);
       setDetailReadiness(readinessRes.data || emptyReadiness);
+      setDetailSubTab('profile');
       setDetailModalOpen(true);
+      
+      // Load finance data in background
+      loadFinancialData(id);
     } catch (err) {
       setDetailReadiness(emptyReadiness);
       showError(err);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const loadFinancialData = async (candidateId) => {
+    try {
+      const [schedulesRes, transactionsRes, readinessRes] = await Promise.all([
+        financeService.getPaymentSchedulesByCandidate(candidateId),
+        financeService.getTransactionsByCandidate(candidateId),
+        financeService.checkExitReadiness(candidateId)
+      ]);
+      setPaymentSchedules(schedulesRes.data || []);
+      setCandidateTransactions(transactionsRes.data || []);
+      setIsReadyForExit(readinessRes.isReady || false);
+    } catch (err) {
+      console.error('Error loading financial data:', err);
     }
   };
 
@@ -439,9 +525,17 @@ function RecruitmentPage() {
   };
 
   const handleUpdateStatus = async (candidate) => {
-    const draft = getTransitionDraft(candidate.id, candidate.status);
+    const draft = getTransitionDraft(candidate);
     const targetStatus = draft.status || candidate.status;
-    if (!targetStatus) return;
+    
+    // Check if anything actually changed
+    const statusChanged = targetStatus !== candidate.status;
+    const reasonChanged = targetStatus === 'WITHDRAWN' && draft.withdrawal_reason !== candidate.withdrawal_reason;
+    
+    if (!statusChanged && !reasonChanged) {
+      toast.info('Trạng thái và lý do không thay đổi.');
+      return;
+    }
 
     try {
       if (canUseExamCreation(targetStatus)) {
@@ -477,14 +571,19 @@ function RecruitmentPage() {
         await examApplicationService.updateExamResult(draft.examApplicationId, {
           result_status: getExamResultStatus(targetStatus)
         });
+      } else if (targetStatus === 'WITHDRAWN') {
+        await recruitmentService.updateCandidateStatus(candidate.id, targetStatus, { 
+          withdrawal_reason: draft.withdrawal_reason 
+        });
       } else {
         await recruitmentService.updateCandidateStatus(candidate.id, targetStatus);
       }
 
-      setTransitionDrafts((prev) => ({
-        ...prev,
-        [candidate.id]: { ...initialTransitionDraft, status: targetStatus }
-      }));
+      setTransitionDrafts((prev) => {
+        const next = { ...prev };
+        delete next[candidate.id];
+        return next;
+      });
       await reloadAll();
       if (String(candidateDetail?.id || '') === String(candidate.id)) {
         await handleViewCandidateDetail(candidate.id);
@@ -492,6 +591,131 @@ function RecruitmentPage() {
       showSuccess('Đã cập nhật trạng thái ứng viên.');
     } catch (err) {
       showError(err);
+    }
+  };
+
+  const handleAddScheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (!candidateDetail) return;
+    try {
+      setUpdating(true);
+      await financeService.createPaymentSchedule({
+        ...addScheduleForm,
+        candidate_id: candidateDetail.id,
+        amount_due: Number(addScheduleForm.amount_due),
+      });
+      showSuccess('Đã thêm khoản phí mới.');
+      setAddScheduleModalOpen(false);
+      setAddScheduleForm({ description: '', amount_due: 0, due_date: '', is_mandatory_for_exit: 0, is_refundable: 0, refund_policy_pct: 0, triggered_by_event: 'MANUAL' });
+      loadFinancialData(candidateDetail.id);
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+    if (!selectedSchedule || !paymentAmount) return;
+
+    try {
+      setUpdating(true);
+      await financeService.recordPayment(selectedSchedule.id, {
+        amount: paymentAmount,
+        note: paymentNote,
+        approved_by_user_id: 1 // Default to 1 for demo
+      });
+      showSuccess('Ghi nhận thanh toán thành công.');
+      setPaymentModalOpen(false);
+      loadFinancialData(candidateDetail.id);
+      await reloadAll();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handlePayAll = async () => {
+    const pendingSchedules = paymentSchedules.filter(s => (s.status === 'PENDING' || s.status === 'PARTIALLY_PAID') && s.balance > 0);
+    if (!pendingSchedules.length) return;
+    
+    if (!window.confirm(`Xác nhận đóng tất cả ${pendingSchedules.length} khoản phí đang nợ?`)) return;
+
+    try {
+      setUpdating(true);
+      await Promise.all(pendingSchedules.map(sch => 
+        financeService.recordPayment(sch.id, {
+          amount: sch.balance,
+          note: 'Thanh toán tất cả công nợ',
+          approved_by_user_id: 1
+        })
+      ));
+      showSuccess('Đã thanh toán tất cả các khoản phí.');
+      loadFinancialData(candidateDetail.id);
+      await reloadAll();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRefundAll = async () => {
+    if (!candidateDetail) return;
+    let reason = candidateDetail.withdrawal_reason || 'TH3';
+    if (candidateDetail.status === 'FAILED_POOL') reason = 'TH1';
+
+    if (!window.confirm(`Xác nhận thực hiện hoàn tiền cho tất cả các khoản phí đã đóng (Theo trường hợp ${reason})?`)) return;
+
+    try {
+      setUpdating(true);
+      await financeService.processRefundsManually(candidateDetail.id, reason);
+      showSuccess('Đã thực hiện hoàn tiền thành công.');
+      loadFinancialData(candidateDetail.id);
+      await reloadAll();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleOpenRefundModal = (sch) => {
+    setSelectedSchedule(sch);
+    let pct = 0;
+    const reason = candidateDetail.status === 'FAILED_POOL' ? 'TH1' : (candidateDetail.withdrawal_reason || 'TH3');
+    
+    if (reason === 'TH1') pct = sch.refund_pct_on_fail_exam || 0;
+    else if (reason === 'TH2') pct = sch.refund_pct_on_withdrawal || 0;
+    else if (reason === 'TH5') pct = sch.refund_pct_on_no_go || 0;
+
+    const calculated = (parseFloat(sch.amount_paid) * parseFloat(pct)) / 100;
+    setRefundAmount(calculated);
+    setRefundNote(`Hoàn tiền cho ${sch.description} (Trường hợp ${reason}, tỷ lệ ${pct}%)`);
+    setRefundModalOpen(true);
+  };
+
+  const handleRecordRefund = async (e) => {
+    e.preventDefault();
+    if (!selectedSchedule || refundAmount === undefined || refundAmount === null) return;
+
+    try {
+      setUpdating(true);
+      await financeService.recordRefund(selectedSchedule.id, {
+        amount: refundAmount,
+        note: refundNote,
+        approved_by_user_id: 1
+      });
+      showSuccess('Ghi nhận hoàn tiền thành công.');
+      setRefundModalOpen(false);
+      loadFinancialData(candidateDetail.id);
+      await reloadAll();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -974,10 +1198,13 @@ function RecruitmentPage() {
                         </div>
                         <div className="status-inline" style={{ marginTop: 10 }}>
                           <select
-                            value={draft.status || row.status}
-                            onChange={(e) => setTransitionDraft(row.id, 'status', e.target.value, row.status)}
+                            value={transitionDrafts[row.id]?.status ?? row.status ?? ''}
+                            onChange={(e) => setTransitionDraft(row, 'status', e.target.value)}
                           >
-                            {CANDIDATE_STATUSES.map((status) => (
+                            <option value={row.status}>
+                              {CANDIDATE_STATUS_LABELS[row.status] || row.status} (Hiện tại)
+                            </option>
+                            {getAvailableTransitions(row.status).map((status) => (
                               <option key={status} value={status}>
                                 {CANDIDATE_STATUS_LABELS[status] || status}
                               </option>
@@ -998,7 +1225,7 @@ function RecruitmentPage() {
                               <select
                                 value={draft.jobOrderId}
                                 onChange={(e) =>
-                                  setTransitionDraft(row.id, 'jobOrderId', e.target.value, row.status)
+                                  setTransitionDraft(row, 'jobOrderId', e.target.value)
                                 }
                               >
                                 <option value="">Chọn đơn hàng OPEN</option>
@@ -1015,7 +1242,7 @@ function RecruitmentPage() {
                                 type="datetime-local"
                                 value={draft.examDate}
                                 onChange={(e) =>
-                                  setTransitionDraft(row.id, 'examDate', e.target.value, row.status)
+                                  setTransitionDraft(row, 'examDate', e.target.value)
                                 }
                               />
                             </label>
@@ -1028,7 +1255,7 @@ function RecruitmentPage() {
                               <select
                                 value={draft.examApplicationId}
                                 onChange={(e) =>
-                                  setTransitionDraft(row.id, 'examApplicationId', e.target.value, row.status)
+                                  setTransitionDraft(row, 'examApplicationId', e.target.value)
                                 }
                               >
                                 <option value="">Chọn phiếu thi</option>
@@ -1039,6 +1266,21 @@ function RecruitmentPage() {
                                 ))}
                               </select>
                             </label>
+                          </div>
+                        ) : null}
+                        {(draft.status === 'WITHDRAWN' || row.status === 'WITHDRAWN') ? (
+                          <div className="grid-form" style={{ marginTop: 10 }}>
+                             <label>
+                                Lý do rút hồ sơ
+                                <select 
+                                   value={transitionDrafts[row.id]?.withdrawal_reason ?? row.withdrawal_reason ?? 'TH3'} 
+                                   onChange={e => setTransitionDraft(row, 'withdrawal_reason', e.target.value)}
+                                >
+                                   <option value="TH2">Rút hồ sơ (Có báo trước)</option>
+                                   <option value="TH3">Bỏ ngang (Không báo trước)</option>
+                                   <option value="TH5">Trúng tuyển nhưng không đi</option>
+                                </select>
+                             </label>
                           </div>
                         ) : null}
                       </td>
@@ -1153,6 +1395,21 @@ function RecruitmentPage() {
                             </label>
                           </div>
                         ) : null}
+                        {getTransitionDraft(item.id, item.status).status === 'WITHDRAWN' ? (
+                          <div className="grid-form" style={{ marginTop: 10 }}>
+                             <label>
+                                Lý do rút hồ sơ
+                                <select 
+                                   value={getTransitionDraft(item.id, item.status).withdrawalReason} 
+                                   onChange={e => setTransitionDraft(item.id, 'withdrawalReason', e.target.value, item.status)}
+                                >
+                                   <option value="TH2">Rút hồ sơ (Có báo trước)</option>
+                                   <option value="TH3">Bỏ ngang (Không báo trước)</option>
+                                   <option value="TH5">Trúng tuyển nhưng không đi</option>
+                                </select>
+                             </label>
+                          </div>
+                        ) : null}
                       </article>
                     ))}
                     {!column.items?.length ? <p className="tiny muted">Chưa có ứng viên.</p> : null}
@@ -1250,105 +1507,210 @@ function RecruitmentPage() {
       >
         {candidateDetail ? (
           <>
-            <div className="stats-inline">
-              <div className="mini-stat">
-                <span>CCCD</span>
-                <strong>{candidateDetail.citizen_id || '-'}</strong>
-              </div>
-              <div className="mini-stat">
-                <span>Ứng viên</span>
-                <strong>{candidateDetail.full_name || '-'}</strong>
-              </div>
-              <div className="mini-stat">
-                <span>Nguồn</span>
-                <strong>{candidateDetail.source_name || '-'}</strong>
-              </div>
-              <div className="mini-stat">
-                <span>Trạng thái</span>
-                <strong>{CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</strong>
-              </div>
-              <div className="mini-stat">
-                <span>Readiness đã nộp</span>
-                <strong>
-                  {detailReadiness.submitted_total || 0}/{detailReadiness.required_total || 0}
-                </strong>
-              </div>
+            <div className="surface" style={{ padding: "0 0 15px 0", marginBottom: "20px", background: "transparent", boxShadow: "none" }}>
+               <SegmentTabs 
+                  tabs={[
+                    { key: 'profile', label: 'Thông tin chung' },
+                    { key: 'finance', label: 'Tài chính & Phí' }
+                  ]} 
+                  activeKey={detailSubTab} 
+                  onChange={setDetailSubTab} 
+               />
             </div>
 
-            <div className="table-wrap compact-table">
-              <table className="data-table">
-                <tbody>
-                  <tr>
-                    <th>CCCD</th>
-                    <td>{candidateDetail.citizen_id || '-'}</td>
-                    <th>Điện thoại</th>
-                    <td>{candidateDetail.phone || '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>Email</th>
-                    <td>{candidateDetail.email || '-'}</td>
-                    <th>Ngày sinh</th>
-                    <td>{formatDate(candidateDetail.dob)}</td>
-                  </tr>
-                  <tr>
-                    <th>Giới tính</th>
-                    <td>{candidateDetail.gender || '-'}</td>
-                    <th>Chiều cao</th>
-                    <td>{candidateDetail.height ?? '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>Cân nặng</th>
-                    <td>{candidateDetail.weight ?? '-'}</td>
-                    <th>Nhóm máu</th>
-                    <td>{candidateDetail.blood_type || '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>Học vấn</th>
-                    <td colSpan={3}>
-                      {educationLevelMap.get(String(candidateDetail.education_level)) ||
-                        candidateDetail.education_level ||
-                        '-'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>Kinh nghiệm</th>
-                    <td colSpan={3}>{candidateDetail.experience_summary || '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>Địa chỉ</th>
-                    <td colSpan={3}>{candidateDetail.address || '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>Ghi chú nguồn</th>
-                    <td colSpan={3}>{candidateDetail.source_note || '-'}</td>
-                  </tr>
-                  <tr>
-                    <th>CV</th>
-                    <td colSpan={3}>
-                      {candidateDetail.cv_file_url ? (
-                        <a href={candidateDetail.cv_file_url} target="_blank" rel="noreferrer">
-                          Mở CV đã upload
-                        </a>
-                      ) : (
-                        'Chưa có CV'
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>Đủ điều kiện nộp hồ sơ</th>
-                    <td>{detailReadiness.can_submit_profile ? 'Có' : 'Chưa'}</td>
-                    <th>Hồ sơ thiếu</th>
-                    <td>
-                      {detailReadiness.missing_submitted_documents?.length
-                        ? detailReadiness.missing_submitted_documents
-                            .map((item) => item.name || item.code)
-                            .join(', ')
-                        : 'Không thiếu'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            {detailSubTab === 'profile' ? (
+              <>
+                <div className="stats-inline">
+                  <div className="mini-stat">
+                    <span>CCCD</span>
+                    <strong>{candidateDetail.citizen_id || '-'}</strong>
+                  </div>
+                  <div className="mini-stat">
+                    <span>Ứng viên</span>
+                    <strong>{candidateDetail.full_name || '-'}</strong>
+                  </div>
+                  <div className="mini-stat">
+                    <span>Nguồn</span>
+                    <strong>{candidateDetail.source_name || '-'}</strong>
+                  </div>
+                  <div className="mini-stat">
+                    <span>Trạng thái</span>
+                    <strong>{CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</strong>
+                  </div>
+                </div>
+
+                <div className="table-wrap compact-table">
+                  <table className="data-table">
+                    <tbody>
+                      <tr>
+                        <th>CCCD</th>
+                        <td>{candidateDetail.citizen_id || '-'}</td>
+                        <th>Điện thoại</th>
+                        <td>{candidateDetail.phone || '-'}</td>
+                      </tr>
+                      <tr>
+                        <th>Email</th>
+                        <td>{candidateDetail.email || '-'}</td>
+                        <th>Ngày sinh</th>
+                        <td>{formatDate(candidateDetail.dob)}</td>
+                      </tr>
+                      <tr>
+                        <th>Giới tính</th>
+                        <td>{candidateDetail.gender || '-'}</td>
+                        <th>Chiều cao</th>
+                        <td>{candidateDetail.height ?? '-'}</td>
+                      </tr>
+                      <tr>
+                        <th>Cân nặng</th>
+                        <td>{candidateDetail.weight ?? '-'}</td>
+                        <th>Nhóm máu</th>
+                        <td>{candidateDetail.blood_type || '-'}</td>
+                      </tr>
+                      <tr>
+                        <th>Học vấn</th>
+                        <td colSpan={3}>
+                          {educationLevelMap.get(String(candidateDetail.education_level)) ||
+                            candidateDetail.education_level ||
+                            '-'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Kinh nghiệm</th>
+                        <td colSpan={3}>{candidateDetail.experience_summary || '-'}</td>
+                      </tr>
+                      <tr>
+                        <th>Địa chỉ</th>
+                        <td colSpan={3}>{candidateDetail.address || '-'}</td>
+                      </tr>
+                      <tr>
+                        <th>CV</th>
+                        <td colSpan={3}>
+                          {candidateDetail.cv_file_url ? (
+                            <a href={candidateDetail.cv_file_url} target="_blank" rel="noreferrer">
+                              Mở CV đã upload
+                            </a>
+                          ) : (
+                            'Chưa có CV'
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="finance-tab">
+                 <div className="stats-inline" style={{ marginBottom: "20px" }}>
+                    <div className="mini-stat">
+                        <span>Tổng tiền đã đóng</span>
+                        <strong className="color-primary">{formatCurrency(candidateTransactions.reduce((acc, t) => t.transaction_type === 'INCOME' ? acc + t.amount_paid : acc - t.amount_paid, 0))}</strong>
+                    </div>
+                    <div className="mini-stat">
+                        <span>Trạng thái tài chính</span>
+                        <strong className={candidateDetail?.status === 'WITHDRAWN' ? 'muted' : (isReadyForExit ? "color-primary" : "color-danger")}>
+                           {candidateDetail?.status === 'WITHDRAWN' ? "ĐÃ RÚT HỒ SƠ" : (isReadyForExit ? "ĐỦ ĐIỀU KIỆN" : "CÒN NỢ PHÍ")}
+                        </strong>
+                    </div>
+                 </div>
+
+                 <div className="row-actions" style={{ marginBottom: "10px", justifyContent: "flex-end" }}>
+                    <button className="btn small ghost" onClick={() => setAddScheduleModalOpen(true)}>+ Thêm khoản phí</button>
+                    {candidateDetail?.status !== 'WITHDRAWN' && candidateDetail?.status !== 'FAILED_POOL' ? (
+                       <button className="btn small" onClick={handlePayAll} disabled={!paymentSchedules.some(s => s.balance > 0 && s.status !== 'CANCELLED')}>Đóng tất cả phí nợ</button>
+                    ) : (
+                       <button className="btn small danger" onClick={handleRefundAll} disabled={!paymentSchedules.some(s => s.amount_paid > 0 && s.status !== 'REFUNDED')}>Xác nhận hoàn tất cả tiền</button>
+                    )}
+                 </div>
+
+                 <SectionHeader title="Lịch thanh toán & Công nợ" />
+                 <div className="table-wrap compact-table">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nội dung</th>
+                                <th>Phân loại</th>
+                                <th>Số tiền</th>
+                                <th>Đã đóng</th>
+                                <th>Còn lại</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {paymentSchedules.map(sch => (
+                                <tr key={sch.id}>
+                                    <td>{sch.description}</td>
+                                    <td>{FEE_CATEGORY_LABELS[sch.fee_category] || sch.fee_category}</td>
+                                    <td className="bold">{formatCurrency(sch.amount_due)}</td>
+                                    <td className="color-primary">{formatCurrency(sch.amount_paid)}</td>
+                                    <td className="color-danger">{formatCurrency(sch.balance)}</td>
+                                    <td>
+                                        <span className={`tiny bold ${sch.status === 'PAID' ? 'color-primary' : (sch.status === 'REFUNDED' ? 'muted' : '')}`}>
+                                            {PAYMENT_SCHEDULE_LABELS[sch.status] || sch.status || 'Chờ thanh toán'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {sch.status !== 'CANCELLED' && sch.status !== 'REFUNDED' && (
+                                            candidateDetail?.status === 'WITHDRAWN' || candidateDetail?.status === 'FAILED_POOL' ? (
+                                              sch.amount_paid > 0 && (
+                                                <button className="btn small danger" onClick={() => handleOpenRefundModal(sch)}>Hoàn tiền</button>
+                                              )
+                                            ) : (
+                                              sch.status !== 'PAID' && sch.balance > 0 && (
+                                                <button className="btn small" onClick={() => {
+                                                    setSelectedSchedule(sch);
+                                                    setPaymentAmount(sch.balance);
+                                                    setPaymentNote(`Đóng tiền cho ${sch.description}`);
+                                                    setPaymentModalOpen(true);
+                                                }}>Đóng phí</button>
+                                              )
+                                            )
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot style={{ background: "rgba(0,0,0,0.05)", fontWeight: "bold" }}>
+                            <tr>
+                                <td colSpan={2}>TỔNG CỘNG</td>
+                                <td>{formatCurrency(paymentSchedules.reduce((acc, s) => acc + Number(s.amount_due), 0))}</td>
+                                <td className="color-primary">{formatCurrency(paymentSchedules.reduce((acc, s) => acc + Number(s.amount_paid), 0))}</td>
+                                <td className="color-danger">{formatCurrency(paymentSchedules.reduce((acc, s) => acc + Number(s.balance), 0))}</td>
+                                <td colSpan={2}></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                 </div>
+
+                 <SectionHeader title="Lịch sử giao dịch" style={{ marginTop: "30px" }} />
+                 <div className="table-wrap compact-table">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Ngày</th>
+                                <th>Loại</th>
+                                <th>Số tiền</th>
+                                <th>Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {candidateTransactions.map(t => (
+                                <tr key={t.id}>
+                                    <td>{formatDate(t.transaction_at)}</td>
+                                    <td>
+                                        <span className={t.transaction_type === 'REFUND' ? 'color-danger' : 'color-primary'}>
+                                            {TRANSACTION_TYPE_LABELS[t.transaction_type]}
+                                        </span>
+                                    </td>
+                                    <td className="bold">{formatCurrency(t.amount_paid)}</td>
+                                    <td>{t.note}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                 </div>
+              </div>
+            )}
           </>
         ) : null}
       </DetailModal>
@@ -1365,6 +1727,138 @@ function RecruitmentPage() {
           handleUpdateCandidate,
           true
         )}
+      </DetailModal>
+      <DetailModal
+        open={paymentModalOpen}
+        title={`Ghi nhận thanh toán: ${selectedSchedule?.description}`}
+        onClose={() => setPaymentModalOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleRecordPayment}>
+           <label className="field-span-2">
+             Số tiền đóng (VND)
+             <input 
+                type="number" 
+                required 
+                value={paymentAmount} 
+                onChange={e => setPaymentAmount(Number(e.target.value))} 
+             />
+           </label>
+           <label className="field-span-2">
+             Ghi chú
+             <textarea 
+                value={paymentNote} 
+                onChange={e => setPaymentNote(e.target.value)} 
+             />
+           </label>
+           <div className="field-span-2 row-actions" style={{ marginTop: "15px" }}>
+              <button type="submit" className="btn">Xác nhận thu tiền</button>
+              <button type="button" className="btn ghost" onClick={() => setPaymentModalOpen(false)}>Đóng</button>
+           </div>
+        </form>
+      </DetailModal>
+      <DetailModal
+        open={refundModalOpen}
+        title="Xác nhận Hoàn tiền"
+        onClose={() => setRefundModalOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleRecordRefund}>
+          <div className="field-span-2">
+            <p><strong>Nội dung:</strong> {selectedSchedule?.description}</p>
+            <p><strong>Số tiền đã đóng:</strong> {formatCurrency(selectedSchedule?.amount_paid)}</p>
+          </div>
+          <label className="field-span-1">
+            Số tiền hoàn lại *
+            <input
+              type="number"
+              required
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(Number(e.target.value))}
+            />
+          </label>
+          <label className="field-span-2">
+            Ghi chú
+            <textarea
+              value={refundNote}
+              onChange={(e) => setRefundNote(e.target.value)}
+            />
+          </label>
+          <div className="field-span-2 row-actions" style={{ marginTop: "10px" }}>
+            <button type="submit" className="btn danger">Xác nhận hoàn tiền</button>
+            <button type="button" className="btn ghost" onClick={() => setRefundModalOpen(false)}>Hủy</button>
+          </div>
+        </form>
+      </DetailModal>
+
+      <DetailModal
+        open={addScheduleModalOpen}
+        title="Thêm khoản phí thủ công"
+        onClose={() => setAddScheduleModalOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleAddScheduleSubmit}>
+          <label className="field-span-2">
+            Nội dung khoản phí *
+            <input
+              required
+              placeholder="VD: Phí đặt cọc cam kết, Học phí đợt 2..."
+              value={addScheduleForm.description}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, description: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Số tiền (VND) *
+            <input
+              type="number"
+              required
+              min={1}
+              value={addScheduleForm.amount_due}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, amount_due: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Hạn đóng
+            <input
+              type="date"
+              value={addScheduleForm.due_date}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, due_date: e.target.value })}
+            />
+          </label>
+          <label className="field-span-1">
+            Bắt buộc để xuất cảnh?
+            <select
+              value={addScheduleForm.is_mandatory_for_exit}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, is_mandatory_for_exit: Number(e.target.value) })}
+            >
+              <option value={0}>Không</option>
+              <option value={1}>Có</option>
+            </select>
+          </label>
+          <label className="field-span-1">
+            Có thể hoàn tiền?
+            <select
+              value={addScheduleForm.is_refundable}
+              onChange={e => setAddScheduleForm({ ...addScheduleForm, is_refundable: Number(e.target.value) })}
+            >
+              <option value={0}>Không</option>
+              <option value={1}>Có</option>
+            </select>
+          </label>
+          {Number(addScheduleForm.is_refundable) === 1 && (
+            <label className="field-span-2">
+              % Hoàn tiền khi rút hồ sơ
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={addScheduleForm.refund_policy_pct}
+                onChange={e => setAddScheduleForm({ ...addScheduleForm, refund_policy_pct: e.target.value })}
+              />
+            </label>
+          )}
+          <div className="field-span-2 row-actions" style={{ marginTop: "15px" }}>
+            <button type="submit" className="btn">Thêm khoản phí</button>
+            <button type="button" className="btn ghost" onClick={() => setAddScheduleModalOpen(false)}>Hủy</button>
+          </div>
+        </form>
       </DetailModal>
     </section>
   );

@@ -85,8 +85,10 @@ exports.createJobOrder = async (req, res, next) => {
 
 exports.getJobOrders = async (req, res, next) => {
   try {
-    const { page, limit, search, partner_id, status } = req.query;
-    const jobOrders = await JobOrder.findAll(parseInt(page), parseInt(limit), search, partner_id, status);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const { search, partner_id, status } = req.query;
+    const jobOrders = await JobOrder.findAll(page, limit, search, partner_id, status);
     res.status(200).json({ success: true, ...jobOrders });
   } catch (error) {
     next(error);
