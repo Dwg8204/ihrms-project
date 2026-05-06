@@ -2,6 +2,7 @@ const Candidate = require('../models/candidateModel');
 const RecruitmentSource = require('../models/recruitmentSourceModel');
 const DocumentModel = require('../models/documentModel');
 const EducationLevel = require('../models/educationLevelModel');
+const PaymentSchedule = require('../models/paymentScheduleModel');
 
 const {
   CANDIDATE_STATUSES,
@@ -252,6 +253,11 @@ const candidateController = {
       await DocumentModel.initCandidateDocuments({
         candidateId: newId,
         phase: 'PRE_EXAM'
+      });
+
+      await PaymentSchedule.generateByEvent(newId, 'ON_REGISTRATION', {
+        autoPaid: true,
+        transactionNote: 'Tự động thu phí khi tạo ứng viên'
       });
 
       const created = await Candidate.getById(newId);

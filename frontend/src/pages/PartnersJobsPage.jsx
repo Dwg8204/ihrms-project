@@ -53,6 +53,22 @@ const initialJobForm = {
   req_weight_min: ''
 };
 
+function normalizeGenderValue(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'any';
+
+  const compact = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+
+  if (compact === 'male' || compact === 'nam' || compact === 'm') return 'male';
+  if (compact === 'female' || compact === 'nu' || compact === 'f') return 'female';
+  if (compact === 'any' || compact === 'all' || compact === 'tatca') return 'any';
+
+  return 'any';
+}
+
 function buildRequirements(form) {
   const requirements = {};
 
@@ -105,7 +121,7 @@ function buildJobFormFromOrder(order) {
     status: order?.status || 'OPEN',
     req_age_min: requirements?.age?.min !== undefined ? String(requirements.age.min) : '',
     req_age_max: requirements?.age?.max !== undefined ? String(requirements.age.max) : '',
-    req_gender: requirements?.gender || 'any',
+    req_gender: normalizeGenderValue(requirements?.gender),
     req_education: educationLevels,
     req_experience_min: requirements?.experience_years?.min !== undefined
       ? String(requirements.experience_years.min)
@@ -128,7 +144,14 @@ function formatRequirementText(requirementsRaw, educationNameMap) {
   }
 
   if (requirements?.gender && requirements.gender !== 'any') {
-    lines.push(`Giới tính: ${requirements.gender === 'male' ? 'Nam' : 'Nữ'}`);
+    const gender = normalizeGenderValue(requirements.gender);
+    if (gender === 'male') {
+      lines.push('Giới tính: Nam');
+    } else if (gender === 'female') {
+      lines.push('Giới tính: Nữ');
+    } else {
+      lines.push('Giới tính: không yêu cầu');
+    }
   } else {
     lines.push('Giới tính: không yêu cầu');
   }

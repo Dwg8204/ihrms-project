@@ -5,7 +5,7 @@ import DetailModal from "../components/DetailModal";
 import { useToast } from "../components/ToastProvider";
 import { financeService } from "../services/financeService";
 import { jobOrderService } from "../services/jobOrderService";
-import { FEE_CATEGORIES, FEE_CATEGORY_LABELS, DUE_EVENT_LABELS, TRANSACTION_TYPE_LABELS } from "../utils/constants";
+import { FEE_CATEGORIES, FEE_CATEGORY_LABELS, DUE_EVENT_LABELS, FINANCE_DUE_EVENT_OPTIONS, TRANSACTION_TYPE_LABELS } from "../utils/constants";
 import { formatDate, formatCurrency } from "../utils/format";
 import { getErrorMessage } from "../utils/toast";
 
@@ -384,8 +384,8 @@ function FinancePage() {
               value={feeForm.due_event}
               onChange={(e) => setFeeForm({ ...feeForm, due_event: e.target.value })}
             >
-              {Object.entries(DUE_EVENT_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+              {FINANCE_DUE_EVENT_OPTIONS.map((event) => (
+                <option key={event.value} value={event.value}>{event.label}</option>
               ))}
             </select>
           </label>

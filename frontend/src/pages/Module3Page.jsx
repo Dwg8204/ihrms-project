@@ -506,7 +506,6 @@ function Module3Page() {
   const tabs = [
     { key: "exam-list", label: t("module3.tabExamList") },
     { key: "exam-result", label: t("module3.tabExamResult") },
-    { key: "training", label: t("module3.tabTraining") },
 
   ];
 

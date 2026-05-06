@@ -172,6 +172,8 @@ function RecruitmentPage() {
     { key: 'funnel', label: 'Phễu trạng thái' }
   ];
 
+  const hiddenFunnelStatuses = new Set(['WAITING_FORM_MATCH']);
+
   const sourceMap = useMemo(() => {
     const map = new Map();
     sources.forEach((item) => map.set(String(item.id), item.source_name));
@@ -837,7 +839,11 @@ function RecruitmentPage() {
       </label>
       <label>
         Giới tính
-        <input value={form.gender} onChange={(e) => onFieldChange('gender', e.target.value)} />
+        <select value={form.gender} onChange={(e) => onFieldChange('gender', e.target.value)}>
+          <option value="">Chọn giới tính</option>
+          <option value="Nam">Nam</option>
+          <option value="Nữ">Nữ</option>
+        </select>
       </label>
       <label>
         Chiều cao
@@ -1306,7 +1312,7 @@ function RecruitmentPage() {
           <div className="surface">
             <SectionHeader title="Quản lý phễu và luồng thi tuyển" />
             <div className="kanban-board">
-              {kanban.map((column) => (
+              {kanban.filter((column) => !hiddenFunnelStatuses.has(column.status)).map((column) => (
                 <div className="kanban-col" key={column.status}>
                   <div className="kanban-head">
                     <h4>{CANDIDATE_STATUS_LABELS[column.status] || column.status}</h4>
@@ -1423,7 +1429,7 @@ function RecruitmentPage() {
             <div>
               <SectionHeader title="Tổng hợp theo trạng thái" />
               <div className="pill-list">
-                {(summary.by_status || []).map((item) => (
+                {(summary.by_status || []).filter((item) => !hiddenFunnelStatuses.has(item.status)).map((item) => (
                   <div key={item.status} className="pill-item">
                     <span>{CANDIDATE_STATUS_LABELS[item.status] || item.status}</span>
                     <strong>{item.total}</strong>

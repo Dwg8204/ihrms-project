@@ -122,7 +122,7 @@ function Sidebar({ user, onLogout }) {
             to: "/module-2",
           },
           {
-            label: "Lịch thi & Đào tạo",
+            label: "Lịch thi",
             icon: RocketIcon,
             to: "/module-3",
           },
@@ -152,7 +152,6 @@ function Sidebar({ user, onLogout }) {
         label: "Mail",
         items: [
           { label: "Mail", icon: MailIcon, to: "/mail" },
-          { label: "AI Trợ lý CEO", icon: TrendIcon, to: "/wizard" },
         ],
       },
     ],

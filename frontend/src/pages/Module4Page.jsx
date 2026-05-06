@@ -6,6 +6,7 @@ import { useToast } from "../components/ToastProvider";
 import { contractService } from "../services/contractService";
 import { recruitmentService } from "../services/recruitmentService";
 import { jobOrderService } from "../services/jobOrderService";
+import { examApplicationService } from "../services/examApplicationService";
 import { CONTRACT_STATUSES, CONTRACT_STATUS_LABELS } from "../utils/constants";
 import { formatDate } from "../utils/format";
 import { getErrorMessage } from "../utils/toast";
@@ -51,6 +52,7 @@ function Module4Page() {
   const [templates, setTemplates] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [jobOrders, setJobOrders] = useState([]);
+  const [examApplications, setExamApplications] = useState([]);
 
   // Pagination & Search for contracts
   const [contractSearch, setContractSearch] = useState("");
@@ -81,14 +83,16 @@ function Module4Page() {
   // Fetch Master Data: Candidates & Job Orders
   const loadMasterData = async () => {
     try {
-      const [candRes, jobRes, tmplRes] = await Promise.all([
+      const [candRes, jobRes, tmplRes, examRes] = await Promise.all([
         recruitmentService.getCandidates({ page: 1, limit: 500 }),
         jobOrderService.getJobOrders({ page: 1, limit: 500 }),
-        contractService.getContractTemplates({ page: 1, limit: 200 })
+        contractService.getContractTemplates({ page: 1, limit: 200 }),
+        examApplicationService.getExamApplications({ page: 1, limit: 2000 })
       ]);
       setCandidates(candRes.data || []);
       setJobOrders(jobRes.data || []);
       setTemplates(tmplRes.data || []);
+      setExamApplications(examRes.data || []);
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
@@ -163,6 +167,24 @@ function Module4Page() {
       (cand) => cand.status === "PASSED" || cand.status === "FORM_MATCHED_WAITING_EXAM"
     );
   }, [candidates]);
+
+  const candidateDefaultJobOrderMap = useMemo(() => {
+    const map = new Map();
+    const sorted = [...examApplications].sort((a, b) => {
+      const ta = new Date(a.exam_date || a.created_at || 0).getTime();
+      const tb = new Date(b.exam_date || b.created_at || 0).getTime();
+      return tb - ta;
+    });
+
+    sorted.forEach((row) => {
+      const candidateId = String(row.candidate_id || "");
+      if (!candidateId || map.has(candidateId)) return;
+      if (!row.job_order_id) return;
+      map.set(candidateId, String(row.job_order_id));
+    });
+
+    return map;
+  }, [examApplications]);
 
   // --- Contracts Event Handlers ---
   const handleOpenCreateContract = () => {
@@ -591,7 +613,15 @@ function Module4Page() {
             Ứng viên *
             <select
               value={contractForm.candidate_id}
-              onChange={(e) => setContractForm((prev) => ({ ...prev, candidate_id: e.target.value }))}
+              onChange={(e) => {
+                const candidateId = e.target.value;
+                const inferredJobOrderId = candidateDefaultJobOrderMap.get(String(candidateId)) || "";
+                setContractForm((prev) => ({
+                  ...prev,
+                  candidate_id: candidateId,
+                  job_order_id: inferredJobOrderId
+                }));
+              }}
             >
               <option value="">Chọn ứng viên</option>
               {/* Show selected candidate if editing, even if they aren't PASSED/FORM_MATCHED */}

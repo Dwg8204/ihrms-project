@@ -6,7 +6,7 @@ const PaymentSchedule = {
   create: async (data) => {
     const {
       candidate_id, contract_id, original_fee_standard_id,
-      description, amount_due, due_date, status,
+      description, amount_due, due_date, status, amount_paid,
       is_mandatory_for_exit, is_refundable, refund_policy_pct,
       triggered_by_event
     } = data;
@@ -14,14 +14,14 @@ const PaymentSchedule = {
     const query = `
       INSERT INTO payment_schedules (
         candidate_id, contract_id, original_fee_standard_id,
-        description, amount_due, due_date, status,
+        description, amount_due, due_date, status, amount_paid,
         is_mandatory_for_exit, is_refundable, refund_policy_pct,
         triggered_by_event
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const [result] = await db.query(query, [
       candidate_id, contract_id, original_fee_standard_id,
-      description, amount_due, due_date, status || 'PENDING',
+      description, amount_due, due_date, status || 'PENDING', amount_paid || 0,
       is_mandatory_for_exit || false, is_refundable || false, refund_policy_pct || 0,
       triggered_by_event
     ]);
@@ -224,7 +224,11 @@ const PaymentSchedule = {
     return rows[0].unpaid_count === 0;
   },
 
-  generateByEvent: async (candidateId, event, { jobOrderId = null, contractId = null, contractType = null } = {}) => {
+  generateByEvent: async (
+    candidateId,
+    event,
+    { jobOrderId = null, contractId = null, contractType = null, autoPaid = false, transactionNote = null } = {}
+  ) => {
     const candidate = await db.query('SELECT id FROM candidates WHERE id = ?', [candidateId]);
     if (!candidate.length) return [];
 
@@ -232,6 +236,22 @@ const PaymentSchedule = {
     const createdSchedules = [];
 
     for (const standard of standards) {
+      const [existing] = await db.query(
+        `
+        SELECT id
+        FROM payment_schedules
+        WHERE candidate_id = ?
+          AND original_fee_standard_id = ?
+          AND triggered_by_event = ?
+          AND status <> 'CANCELLED'
+        LIMIT 1
+        `,
+        [candidateId, standard.id, event]
+      );
+      if (existing.length > 0) {
+        continue;
+      }
+
       const schedule = await PaymentSchedule.create({
         candidate_id: candidateId,
         contract_id: contractId,
@@ -239,12 +259,26 @@ const PaymentSchedule = {
         description: standard.fee_name,
         amount_due: standard.amount,
         due_date: new Date(), // Default to today
-        status: 'PENDING',
+        status: autoPaid ? 'PAID' : 'PENDING',
+        amount_paid: autoPaid ? standard.amount : 0,
         is_mandatory_for_exit: standard.is_mandatory_for_exit,
         is_refundable: standard.is_refundable_on_withdrawal,
         refund_policy_pct: standard.refund_pct_on_withdrawal,
         triggered_by_event: event
       });
+
+      if (autoPaid) {
+        await Transaction.create({
+          candidate_id: candidateId,
+          contract_id: contractId,
+          fee_standard_id: standard.id,
+          payment_schedule_id: schedule.id,
+          amount_paid: standard.amount,
+          transaction_type: 'INCOME',
+          note: transactionNote || `Tự động ghi nhận thu phí theo sự kiện ${event}`,
+          approved_by_user_id: 1
+        });
+      }
       createdSchedules.push(schedule);
     }
     return createdSchedules;

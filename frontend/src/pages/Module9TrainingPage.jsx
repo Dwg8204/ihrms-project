@@ -154,7 +154,11 @@ function Module9TrainingPage() {
 
   const loadCandidates = async () => {
     try {
-      const res = await recruitmentService.getCandidates({ page: 1, limit: 300, status: "PASSED" });
+      const res = await recruitmentService.getCandidates({
+        page: 1,
+        limit: 300,
+        status: "FORM_MATCHED_WAITING_EXAM"
+      });
       setCandidates(res.data || []);
     } catch (err) {
       toast.error(getErrorMessage(err));

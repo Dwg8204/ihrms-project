@@ -33,6 +33,22 @@ function normalizeEducationRequirement(requirements) {
   };
 }
 
+function normalizeGenderValue(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+
+  const compact = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+
+  if (compact === 'male' || compact === 'nam' || compact === 'm') return 'male';
+  if (compact === 'female' || compact === 'nu' || compact === 'f') return 'female';
+  if (compact === 'any' || compact === 'all' || compact === 'tatca') return 'any';
+
+  return compact;
+}
+
 class JobOrder {
   static async create(jobOrderData) {
     let { partner_id, job_title, quantity_needed, salary_info, requirements, deadline, status = JOB_ORDER_STATUSES.OPEN } = jobOrderData;
@@ -433,11 +449,13 @@ class JobOrder {
                 }
             }
 
-            if (requirements.gender && requirements.gender !== 'any' && candidate.gender) {
-                if (requirements.gender.toLowerCase() !== candidate.gender.toLowerCase()) {
-                    return false;
-                }
+          const requiredGender = normalizeGenderValue(requirements.gender);
+          if (requiredGender && requiredGender !== 'any') {
+            const candidateGender = normalizeGenderValue(candidate.gender);
+            if (candidateGender !== requiredGender) {
+              return false;
             }
+          }
 
           if (requiredEducationIds.size > 0 || requiredEducationNames.size > 0) {
             const candidateEducationId = toValidPositiveInt(candidate.education_level);

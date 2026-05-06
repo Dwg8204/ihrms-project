@@ -125,9 +125,9 @@ export const FEE_CATEGORY_LABELS = {
 };
 
 export const DUE_EVENT_LABELS = {
-  INITIAL_REGISTRATION: 'Ngay khi tiếp nhận',
-  ON_REGISTRATION: 'Khi nộp phí đợt 0',
-  BEFORE_INTERNAL_EXAM: 'Trước thi nội bộ',
+  INITIAL_REGISTRATION: 'Tạo ứng viên',
+  ON_REGISTRATION: 'Tạo ứng viên',
+  BEFORE_INTERNAL_EXAM: 'Trước khi thi',
   CONTRACT_SIGNED: 'Khi ký hợp đồng',
   ON_CONTRACT_SIGN: 'Khi ký hợp đồng',
   VISA_RECEIVED: 'Khi có Visa',
@@ -139,3 +139,8 @@ export const DUE_EVENT_LABELS = {
   ON_PASSED_EXAM: 'Khi đậu kỳ thi',
   BEFORE_HEALTH_CHECK: 'Trước khám sức khỏe',
 };
+
+export const FINANCE_DUE_EVENT_OPTIONS = [
+  { value: 'ON_REGISTRATION', label: 'Tạo ứng viên' },
+  { value: 'BEFORE_INTERNAL_EXAM', label: 'Trước khi thi' },
+];

@@ -90,14 +90,15 @@ exports.recordRefundForSchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
     const { amount, note, approved_by_user_id } = req.body;
+    const normalizedAmount = Number(amount);
     
-    if (!amount || amount <= 0) {
+    if (amount === undefined || amount === null || Number.isNaN(normalizedAmount) || normalizedAmount < 0) {
       return res.status(400).json({ success: false, message: 'Invalid refund amount.' });
     }
 
     const result = await PaymentSchedule.recordRefund(
       scheduleId,
-      amount,
+      normalizedAmount,
       note,
       approved_by_user_id
     );

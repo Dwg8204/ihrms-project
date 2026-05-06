@@ -398,7 +398,13 @@ const Candidate = {
 
     // --- XỬ LÝ TÀI CHÍNH KHI CHUYỂN TRẠNG THÁI (Module 5) ---
     if (result.affectedRows > 0) {
-        if (newStatus === CANDIDATE_STATUSES.PASSED) {
+      if (newStatus === CANDIDATE_STATUSES.FORM_MATCHED_WAITING_EXAM) {
+        await PaymentSchedule.generateByEvent(candidateId, 'BEFORE_INTERNAL_EXAM', {
+          jobOrderId,
+          autoPaid: true,
+          transactionNote: 'Tự động thu phí trước khi thi khi ứng viên được ghép đơn'
+        });
+      } else if (newStatus === CANDIDATE_STATUSES.PASSED) {
             // Tự động sinh phí khi đỗ đơn (Ví dụ: Phí hồ sơ, phí cọc đợt 1)
             await PaymentSchedule.generateByEvent(candidateId, 'ON_PASSED_EXAM', { jobOrderId });
         } else if (newStatus === CANDIDATE_STATUSES.FAILED_POOL) {
