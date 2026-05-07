@@ -7,9 +7,15 @@ INSERT IGNORE INTO recruitment_sources (id, source_name) VALUES
 (3, 'Người quen giới thiệu');
 
 -- ── 2. Đối tác ───────────────────────────────────────
-INSERT IGNORE INTO partners (id, name, country, contact_person, phone, email, status) VALUES
-(1, 'Công ty Nhật Bản ABC', 'Nhật Bản', 'Tanaka Kenji', '0901111111', 'tanaka@abc.jp', 'Active'),
-(2, 'Công ty Hàn Quốc XYZ', 'Hàn Quốc', 'Kim Minho', '0902222222', 'kim@xyz.kr', 'Active');
+INSERT IGNORE INTO partners (id, name, country, status) VALUES
+(1, 'Công ty Nhật Bản ABC', 'Nhật Bản', 'Active'),
+(2, 'Công ty Hàn Quốc XYZ', 'Hàn Quốc', 'Active');
+
+-- ── 2.1 Liên hệ đối tác ──────────────────────────────
+INSERT IGNORE INTO partner_contacts (partner_id, contact_name, contact_phone, contact_email, contact_role, is_primary) VALUES
+(1, 'Tanaka Kenji', '0901111111', 'tanaka@abc.jp', 'Quản lý tuyển dụng', 1),
+(2, 'Kim Minho', '0902222222', 'kim@xyz.kr', 'Trưởng phòng nhân sự', 1),
+(2, 'Nguyễn Hoàng Nam', '0967430677', NULL, 'Trưởng phòng cung ứng nhân sự', 0);
 
 -- ── 3. Đơn hàng ──────────────────────────────────────
 INSERT IGNORE INTO job_orders (id, partner_id, job_title, quantity_needed, salary_info, requirements, deadline, status) VALUES

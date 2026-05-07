@@ -217,6 +217,41 @@ function Module4Page() {
       toast.error("Vui lòng chọn ứng viên và loại hợp đồng.");
       return;
     }
+    if (!contractForm.signed_date || !contractForm.effective_date || !contractForm.expiry_date) {
+      toast.error("Vui lòng nhập đầy đủ ngày ký, ngày hiệu lực và ngày hết hạn.");
+      return;
+    }
+
+    const signed = new Date(contractForm.signed_date);
+    const effective = new Date(contractForm.effective_date);
+    const expiry = new Date(contractForm.expiry_date);
+
+    if (effective < signed) {
+      toast.error("Ngày hiệu lực phải sau hoặc bằng ngày ký.");
+      return;
+    }
+    if (expiry <= effective) {
+      toast.error("Ngày hết hạn phải sau ngày hiệu lực.");
+      return;
+    }
+
+    // Kiểm tra ngày ký so với ngày thi đạt
+    if (contractForm.job_order_id) {
+      const targetExam = examApplications.find(
+        (ea) =>
+          String(ea.candidate_id) === String(contractForm.candidate_id) &&
+          String(ea.job_order_id) === String(contractForm.job_order_id) &&
+          ea.result_status === "Pass"
+      );
+      if (targetExam && targetExam.exam_date) {
+        const examDate = new Date(targetExam.exam_date);
+        // Reset hours to compare only dates if needed, but here we use simple comparison
+        if (signed <= examDate) {
+          toast.error(`Ngày ký hợp đồng phải sau ngày ứng viên thi đạt (${formatDate(targetExam.exam_date)}).`);
+          return;
+        }
+      }
+    }
 
     let parsedJson = null;
     if (contractForm.contract_details_json) {
@@ -682,7 +717,7 @@ function Module4Page() {
           </label>
 
           <label className="field-span-1">
-            Ngày ký
+            Ngày ký *
             <input
               type="date"
               value={contractForm.signed_date}
@@ -691,7 +726,7 @@ function Module4Page() {
           </label>
 
           <label className="field-span-1">
-            Ngày hiệu lực
+            Ngày hiệu lực *
             <input
               type="date"
               value={contractForm.effective_date}
@@ -700,7 +735,7 @@ function Module4Page() {
           </label>
 
           <label className="field-span-1">
-            Ngày hết hạn
+            Ngày hết hạn *
             <input
               type="date"
               value={contractForm.expiry_date}

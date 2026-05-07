@@ -29,7 +29,7 @@ function validateOptionalPhoneAndEmail(phone, email) {
 // --- Partner CRUD ---
 exports.createPartner = async (req, res, next) => {
   try {
-    const { name, country, contact_person, phone, email, status, reputation_score } = req.body;
+    const { name, country, contact_person, phone, email, status } = req.body;
     const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
@@ -39,11 +39,20 @@ exports.createPartner = async (req, res, next) => {
     if (status && !isValidPartnerStatus(status)) {
       return res.status(400).json({ success: false, message: 'Invalid partner status.' });
     }
-    if (reputation_score !== undefined && (reputation_score < 1 || reputation_score > 10)) {
-        return res.status(400).json({ success: false, message: 'Reputation score must be between 1 and 10.' });
+
+    const newPartner = await Partner.create({ name, country, status });
+    
+    // Nếu có thông tin người liên hệ, tạo bản ghi liên hệ đầu tiên làm Primary
+    if (contact_person || normalized.phone || normalized.email) {
+        await PartnerContact.create(newPartner.id, {
+            contact_name: contact_person || 'Liên hệ chính',
+            contact_phone: normalized.phone,
+            contact_email: normalized.email,
+            contact_role: 'Liên hệ chính',
+            is_primary: true
+        });
     }
 
-    const newPartner = await Partner.create({ name, country, contact_person, phone: normalized.phone, email: normalized.email, status, reputation_score });
     res.status(201).json({ success: true, data: newPartner });
   } catch (error) {
     if (error.message.includes('Phone must') || error.message.includes('Email is invalid')) {
@@ -81,21 +90,41 @@ exports.getPartnerById = async (req, res, next) => {
 exports.updatePartner = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, country, contact_person, phone, email, status, reputation_score } = req.body;
+    const { name, country, contact_person, phone, email, status } = req.body;
     const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
     if (status && !isValidPartnerStatus(status)) {
       return res.status(400).json({ success: false, message: 'Invalid partner status.' });
     }
-    if (reputation_score !== undefined && (reputation_score < 1 || reputation_score > 10)) {
-        return res.status(400).json({ success: false, message: 'Reputation score must be between 1 and 10.' });
-    }
 
-    const updatedPartner = await Partner.update(id, { name, country, contact_person, phone: normalized.phone, email: normalized.email, status, reputation_score });
+    const updatedPartner = await Partner.update(id, { name, country, status });
     
     if (!updatedPartner) {
       return res.status(404).json({ success: false, message: 'Partner not found.' });
+    }
+
+    // Cập nhật hoặc tạo liên hệ Primary nếu có thông tin
+    if (contact_person || normalized.phone || normalized.email) {
+        const contacts = await PartnerContact.findByPartnerId(id);
+        const primaryContact = contacts.find(c => c.is_primary);
+        
+        if (primaryContact) {
+            await PartnerContact.update(primaryContact.id, id, {
+                contact_name: contact_person,
+                contact_phone: normalized.phone,
+                contact_email: normalized.email,
+                is_primary: true
+            });
+        } else {
+            await PartnerContact.create(id, {
+                contact_name: contact_person || 'Liên hệ chính',
+                contact_phone: normalized.phone,
+                contact_email: normalized.email,
+                contact_role: 'Liên hệ chính',
+                is_primary: true
+            });
+        }
     }
 
     // Nếu trạng thái đối tác là INACTIVE hoặc BLACKLISTED, cập nhật các đơn đặt hàng liên quan.

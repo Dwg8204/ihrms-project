@@ -11,7 +11,10 @@ const EXAM_RESULT_STATUSES = Object.freeze({
 
 class ExamApplication {
     static assertFutureExamDate(examDate) {
-        if (!examDate || !isFutureDateTime(examDate)) {
+        // Cho phép để trống khi mới ghép đơn hàng (đối khớp thủ công)
+        if (!examDate) return;
+        
+        if (!isFutureDateTime(examDate)) {
             throw new Error('exam_date must be a valid future date/time.');
         }
     }

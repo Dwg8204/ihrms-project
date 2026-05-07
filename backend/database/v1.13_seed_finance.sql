@@ -24,8 +24,8 @@ FROM tmp_cands WHERE rn = 1;
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Học phí đào tạo', 5000000,
-  DATE_SUB(CURDATE(), INTERVAL 30 DAY), 'PAID', 5000000, 0, 1, 65, 'ON_CONTRACT_SIGN'
+SELECT id, 'Phí hồ sơ (Cọc đợt 1)', 2000000,
+  DATE_SUB(CURDATE(), INTERVAL 30 DAY), 'PAID', 2000000, 1, 1, 80, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 1;
 
 -- Ứng viên rn=2: PAID 1 khoản, PARTIALLY_PAID 1 khoản, OVERDUE 1 khoản
@@ -39,34 +39,34 @@ FROM tmp_cands WHERE rn = 2;
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Học phí đào tạo', 5000000,
-  DATE_SUB(CURDATE(), INTERVAL 20 DAY), 'PARTIALLY_PAID', 2500000, 0, 1, 65, 'ON_CONTRACT_SIGN'
+SELECT id, 'Phí hồ sơ (Cọc đợt 1)', 2000000,
+  DATE_SUB(CURDATE(), INTERVAL 20 DAY), 'PARTIALLY_PAID', 1000000, 1, 1, 80, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 2;
 
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Phí làm visa / hộ chiếu', 1500000,
-  DATE_SUB(CURDATE(), INTERVAL 3 DAY), 'OVERDUE', 0, 1, 1, 100, 'BEFORE_VISA_APPLY'
+SELECT id, 'Học phí đào tạo', 5000000,
+  DATE_SUB(CURDATE(), INTERVAL 3 DAY), 'OVERDUE', 0, 0, 1, 65, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 2;
 
 -- Ứng viên rn=3: PAID rồi REFUNDED (thi trượt TH1)
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Phí thi chứng chỉ', 2000000,
-  DATE_SUB(CURDATE(), INTERVAL 45 DAY), 'REFUNDED', 0, 0, 1, 100, 'BEFORE_OFFICIAL_CERT_EXAM'
+SELECT id, 'Phí hồ sơ (Cọc đợt 1)', 2000000,
+  DATE_SUB(CURDATE(), INTERVAL 45 DAY), 'REFUNDED', 0, 1, 1, 100, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 3;
 
 -- Ứng viên rn=4: PENDING chưa đóng gì
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Phí bảo hiểm xuất cảnh', 3000000,
-  DATE_ADD(CURDATE(), INTERVAL 14 DAY), 'PENDING', 0, 1, 1, 50, 'BEFORE_DEPARTURE'
+SELECT id, 'Tiền cọc cam kết', 20000000,
+  DATE_ADD(CURDATE(), INTERVAL 14 DAY), 'PENDING', 0, 1, 1, 50, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 4;
 
--- Ứng viên rn=5: PAID đủ 3 khoản
+-- Ứng viên rn=5: PAID đủ 2 khoản
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
@@ -77,15 +77,8 @@ FROM tmp_cands WHERE rn = 5;
 INSERT INTO payment_schedules
   (candidate_id, description, amount_due, due_date, status, amount_paid,
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Học phí đào tạo', 5000000,
-  DATE_SUB(CURDATE(), INTERVAL 55 DAY), 'PAID', 5000000, 0, 1, 65, 'ON_CONTRACT_SIGN'
-FROM tmp_cands WHERE rn = 5;
-
-INSERT INTO payment_schedules
-  (candidate_id, description, amount_due, due_date, status, amount_paid,
-   is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
-SELECT id, 'Phí làm visa / hộ chiếu', 1500000,
-  DATE_SUB(CURDATE(), INTERVAL 10 DAY), 'PAID', 1500000, 1, 1, 100, 'BEFORE_VISA_APPLY'
+SELECT id, 'Phí hồ sơ (Cọc đợt 1)', 2000000,
+  DATE_SUB(CURDATE(), INTERVAL 55 DAY), 'PAID', 2000000, 1, 1, 80, 'BEFORE_INTERNAL_EXAM'
 FROM tmp_cands WHERE rn = 5;
 
 -- ============================================================

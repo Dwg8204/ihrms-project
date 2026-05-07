@@ -28,11 +28,11 @@ INSERT INTO payment_schedules
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
 SELECT
   id,
-  'Học phí đào tạo ngoại ngữ / kỹ năng', 5000000,
+  'Phí hồ sơ (Cọc đợt 1)', 2000000,
   DATE_SUB(CURDATE(), INTERVAL 30 DAY),
-  'PAID', 5000000,
-  0, 1, 65.00,
-  'ON_CONTRACT_SIGN'
+  'PAID', 2000000,
+  1, 1, 80.00,
+  'BEFORE_INTERNAL_EXAM'
 FROM tmp_candidates LIMIT 1;
 
 INSERT INTO payment_schedules
@@ -40,11 +40,11 @@ INSERT INTO payment_schedules
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
 SELECT
   id,
-  'Phí làm visa / hộ chiếu', 1500000,
+  'Học phí đào tạo ngoại ngữ / kỹ năng', 5000000,
   DATE_SUB(CURDATE(), INTERVAL 5 DAY),
   'OVERDUE', 0,
-  1, 1, 100.00,
-  'BEFORE_VISA_APPLY'
+  0, 1, 65.00,
+  'BEFORE_INTERNAL_EXAM'
 FROM tmp_candidates LIMIT 1;
 
 -- Ứng viên 2: đóng 1 phần học phí, còn nợ
@@ -65,11 +65,11 @@ INSERT INTO payment_schedules
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
 SELECT
   id,
-  'Học phí đào tạo ngoại ngữ / kỹ năng', 5000000,
+  'Phí hồ sơ (Cọc đợt 1)', 2000000,
   DATE_SUB(CURDATE(), INTERVAL 20 DAY),
-  'PARTIALLY_PAID', 2500000,
-  0, 1, 65.00,
-  'ON_CONTRACT_SIGN'
+  'PARTIALLY_PAID', 1000000,
+  1, 1, 80.00,
+  'BEFORE_INTERNAL_EXAM'
 FROM tmp_candidates ORDER BY id ASC LIMIT 1 OFFSET 1;
 
 INSERT INTO payment_schedules
@@ -77,11 +77,11 @@ INSERT INTO payment_schedules
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
 SELECT
   id,
-  'Phí bảo hiểm xuất cảnh', 3000000,
+  'Học phí đào tạo', 5000000,
   DATE_ADD(CURDATE(), INTERVAL 14 DAY),
   'PENDING', 0,
-  1, 1, 50.00,
-  'BEFORE_DEPARTURE'
+  0, 1, 65.00,
+  'BEFORE_INTERNAL_EXAM'
 FROM tmp_candidates ORDER BY id ASC LIMIT 1 OFFSET 1;
 
 -- Ứng viên 3: đã đóng xong + được hoàn phí thi trượt
@@ -102,11 +102,11 @@ INSERT INTO payment_schedules
    is_mandatory_for_exit, is_refundable, refund_policy_pct, triggered_by_event)
 SELECT
   id,
-  'Phí thi chứng chỉ chính thức', 2000000,
+  'Phí hồ sơ (Cọc đợt 1)', 2000000,
   DATE_SUB(CURDATE(), INTERVAL 40 DAY),
   'REFUNDED', 0,
-  0, 1, 100.00,
-  'BEFORE_OFFICIAL_CERT_EXAM'
+  1, 1, 100.00,
+  'BEFORE_INTERNAL_EXAM'
 FROM tmp_candidates ORDER BY id ASC LIMIT 1 OFFSET 2;
 
 -- ============================================================

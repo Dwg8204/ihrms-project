@@ -57,6 +57,38 @@ class Contract {
         }
       }
 
+      // Đảm bảo các ngày bắt buộc được cung cấp
+      if (!signed_date || !effective_date || !expiry_date) {
+        throw new Error('Ngày ký, ngày hiệu lực và ngày hết hạn là bắt buộc.');
+      }
+
+      // Kiểm tra logic thứ tự ngày
+      const signed = new Date(signed_date);
+      const effective = new Date(effective_date);
+      const expiry = new Date(expiry_date);
+
+      if (effective < signed) {
+        throw new Error('Ngày hiệu lực phải sau hoặc bằng ngày ký.');
+      }
+      if (expiry <= effective) {
+        throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
+      }
+
+      // Kiểm tra ngày ký phải sau ngày thi đạt (nếu có job_order_id)
+      if (job_order_id) {
+        const [examApp] = await db.query(
+          'SELECT exam_date FROM exam_applications WHERE candidate_id = ? AND job_order_id = ? AND result_status = "Pass" LIMIT 1',
+          [candidate_id, job_order_id]
+        );
+        if (examApp.length > 0 && examApp[0].exam_date) {
+          const examDate = new Date(examApp[0].exam_date);
+          if (signed <= examDate) {
+            const formattedExamDate = examDate.toLocaleDateString('vi-VN');
+            throw new Error(`Ngày ký hợp đồng phải sau ngày thi đạt (${formattedExamDate}).`);
+          }
+        }
+      }
+
       // Hãy đảm bảo rằng contract_details_json được lưu trữ dưới dạng chuỗi JSON nếu nó là một đối tượng.
       if (contract_details_json && typeof contract_details_json === 'object') {
         contract_details_json = JSON.stringify(contract_details_json);
@@ -201,6 +233,42 @@ class Contract {
         const [existing] = await db.query('SELECT id FROM contracts WHERE contract_number = ? AND id != ?', [contract_number, id]);
         if (existing.length > 0) {
           throw new Error('Contract number already exists.');
+        }
+      }
+
+      // Xác thực logic ngày tháng nếu có cập nhật
+      const newSignedDate = signed_date || currentContract.signed_date;
+      const newEffectiveDate = effective_date || currentContract.effective_date;
+      const newExpiryDate = expiry_date || currentContract.expiry_date;
+
+      if (newSignedDate && newEffectiveDate && newExpiryDate) {
+        const signed = new Date(newSignedDate);
+        const effective = new Date(newEffectiveDate);
+        const expiry = new Date(newExpiryDate);
+
+        if (effective < signed) {
+          throw new Error('Ngày hiệu lực phải sau hoặc bằng ngày ký.');
+        }
+        if (expiry <= effective) {
+          throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
+        }
+
+        // Kiểm tra ngày ký so với ngày thi đạt
+        const targetCandidateId = candidate_id || currentContract.candidate_id;
+        const targetJobOrderId = job_order_id || currentContract.job_order_id;
+
+        if (targetJobOrderId) {
+          const [examApp] = await db.query(
+            'SELECT exam_date FROM exam_applications WHERE candidate_id = ? AND job_order_id = ? AND result_status = "Pass" LIMIT 1',
+            [targetCandidateId, targetJobOrderId]
+          );
+          if (examApp.length > 0 && examApp[0].exam_date) {
+            const examDate = new Date(examApp[0].exam_date);
+            if (signed <= examDate) {
+              const formattedExamDate = examDate.toLocaleDateString('vi-VN');
+              throw new Error(`Ngày ký hợp đồng phải sau ngày thi đạt (${formattedExamDate}).`);
+            }
+          }
         }
       }
 

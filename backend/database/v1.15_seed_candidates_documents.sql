@@ -166,6 +166,30 @@ ON DUPLICATE KEY UPDATE
 DROP TEMPORARY TABLE IF EXISTS tmp_seed_target_candidates;
 DROP TEMPORARY TABLE IF EXISTS tmp_seed_candidates;
 
+-- Bao dam co it nhat 1 don hang de gan cho phieu thi
+INSERT INTO job_orders (job_title, status)
+SELECT 'Don hang seed', 'Open'
+WHERE NOT EXISTS (SELECT 1 FROM job_orders);
+
+-- Add Exam Applications for PASSED and CONTRACT_SIGNED candidates
+INSERT INTO exam_applications (
+  candidate_id,
+  job_order_id,
+  exam_date,
+  result_status,
+  note
+)
+SELECT
+  c.id,
+  (SELECT id FROM job_orders LIMIT 1),
+  DATE_SUB(CURDATE(), INTERVAL 15 DAY),
+  'Pass',
+  'Seed exam result (v1.15)'
+FROM candidates c
+WHERE c.status IN ('PASSED', 'CONTRACT_SIGNED')
+  AND c.citizen_id BETWEEN '990000000001' AND '990000000050'
+ON DUPLICATE KEY UPDATE result_status = 'Pass';
+
 -- Kiem tra ket qua seed
 SELECT COUNT(*) AS seeded_candidates
 FROM candidates

@@ -261,10 +261,10 @@ const DocumentModel = {
       verified_total,
       can_submit_profile,
       can_proceed_verified,
-      can_proceed: can_proceed_verified,
+      can_proceed: can_submit_profile, // Đổi từ can_proceed_verified sang can_submit_profile
       missing_submitted_documents,
       missing_verified_documents,
-      missing_documents: missing_verified_documents
+      missing_documents: missing_submitted_documents // Đổi từ missing_verified_documents sang missing_submitted_documents
     };
   },
 

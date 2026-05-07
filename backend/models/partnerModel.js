@@ -3,7 +3,7 @@ const { PARTNER_STATUSES } = require('../utils/partnerStatus');
 
 class Partner {
   static async create(partnerData) {
-    const { name, country, contact_person, phone, email, status = PARTNER_STATUSES.ACTIVE, reputation_score } = partnerData;
+    const { name, country, status = PARTNER_STATUSES.ACTIVE } = partnerData;
     try {
       // Kiểm tra tên duy nhất
       const [existing] = await db.query('SELECT id FROM partners WHERE name = ?', [name]);
@@ -12,8 +12,8 @@ class Partner {
       }
 
       const [result] = await db.query(
-        'INSERT INTO partners (name, country, contact_person, phone, email, status, reputation_score) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [name, country, contact_person, phone, email, status, reputation_score]
+        'INSERT INTO partners (name, country, status) VALUES (?, ?, ?)',
+        [name, country, status]
       );
       return { id: result.insertId, ...partnerData };
     } catch (error) {
@@ -23,16 +23,26 @@ class Partner {
 
   static async findAll(page = 1, limit = 20, search = '', status = '') {
     const offset = (page - 1) * limit;
-    let query = 'SELECT p.*, COUNT(pc.id) AS total_contacts FROM partners p LEFT JOIN partner_contacts pc ON p.id = pc.partner_id WHERE 1=1';
+    let query = `
+      SELECT 
+        p.*, 
+        COUNT(pc.id) AS total_contacts,
+        MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_name END) AS contact_person,
+        MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_phone END) AS phone,
+        MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_email END) AS email
+      FROM partners p 
+      LEFT JOIN partner_contacts pc ON p.id = pc.partner_id 
+      WHERE 1=1
+    `;
     let countQuery = 'SELECT COUNT(id) AS total FROM partners WHERE 1=1';
     const params = [];
     const countParams = [];
 
     if (search) {
-      query += ' AND (p.name LIKE ? OR p.contact_person LIKE ? OR p.email LIKE ?)';
-      countQuery += ' AND (name LIKE ? OR contact_person LIKE ? OR email LIKE ?)';
+      query += ' AND (p.name LIKE ? OR pc.contact_name LIKE ? OR pc.contact_email LIKE ?)';
+      countQuery += ' AND name LIKE ?'; // Simplifying count search for now or could join too
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      countParams.push(`%${search}%`);
     }
     if (status) {
       query += ' AND p.status = ?';
@@ -65,7 +75,17 @@ class Partner {
 
   static async findById(id) {
     try {
-      const [rows] = await db.query('SELECT * FROM partners WHERE id = ?', [id]);
+      const [rows] = await db.query(`
+        SELECT 
+          p.*,
+          MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_name END) AS contact_person,
+          MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_phone END) AS phone,
+          MAX(CASE WHEN pc.is_primary = 1 THEN pc.contact_email END) AS email
+        FROM partners p
+        LEFT JOIN partner_contacts pc ON p.id = pc.partner_id
+        WHERE p.id = ?
+        GROUP BY p.id
+      `, [id]);
       return rows[0];
     } catch (error) {
       throw error;
@@ -73,7 +93,7 @@ class Partner {
   }
 
   static async update(id, partnerData) {
-    const { name, country, contact_person, phone, email, status, reputation_score } = partnerData;
+    const { name, country, status } = partnerData;
     try {
       // Kiểm tra xem tên có phải là duy nhất nếu tên đang được cập nhật.
       if (name) {
@@ -84,8 +104,8 @@ class Partner {
       }
 
       const [result] = await db.query(
-        'UPDATE partners SET name = COALESCE(?, name), country = COALESCE(?, country), contact_person = COALESCE(?, contact_person), phone = COALESCE(?, phone), email = COALESCE(?, email), status = COALESCE(?, status), reputation_score = COALESCE(?, reputation_score) WHERE id = ?',
-        [name, country, contact_person, phone, email, status, reputation_score, id]
+        'UPDATE partners SET name = COALESCE(?, name), country = COALESCE(?, country), status = COALESCE(?, status) WHERE id = ?',
+        [name, country, status, id]
       );
       if (result.affectedRows === 0) {
         return null; // Không tìm thấy đối tác

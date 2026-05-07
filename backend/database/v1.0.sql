@@ -17,9 +17,6 @@ CREATE TABLE partners (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
     country VARCHAR(100),
-    contact_person VARCHAR(100),
-    phone VARCHAR(20),
-    email VARCHAR(100),
     status VARCHAR(50) DEFAULT 'Active'
 );
 

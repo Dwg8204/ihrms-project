@@ -79,7 +79,7 @@ function validateTeacherForm(form) {
   return "";
 }
 
-function validateClassForm(form) {
+function validateClassForm(form, editingClassId) {
   if (!String(form.class_name || "").trim()) {
     return "Tên lớp là bắt buộc.";
   }
@@ -89,7 +89,7 @@ function validateClassForm(form) {
   if (!form.start_date) {
     return "Vui lòng chọn ngày bắt đầu lớp.";
   }
-  if (form.start_date < getTomorrowDateInput()) {
+  if (!editingClassId && form.start_date < getTomorrowDateInput()) {
     return "Ngày bắt đầu lớp phải sau ngày hiện tại.";
   }
   if (form.end_date && form.end_date < form.start_date) {
@@ -296,7 +296,7 @@ function Module9TrainingPage() {
 
   const handleClassSubmit = async (event) => {
     event.preventDefault();
-    const validationMessage = validateClassForm(classForm);
+    const validationMessage = validateClassForm(classForm, editingClassId);
     if (validationMessage) {
       toast.error(validationMessage);
       return;
@@ -326,10 +326,12 @@ function Module9TrainingPage() {
       class_type: classItem.class_type || "LANGUAGE",
       teacher_id: classItem.teacher_id || "",
       room: classItem.room || "",
-      start_date: classItem.start_date ? String(classItem.start_date).slice(0, 10) : "",
-      end_date: classItem.end_date ? String(classItem.end_date).slice(0, 10) : "",
+      start_date: classItem.start_date ? String(classItem.start_date).split("T")[0] : "",
+      end_date: classItem.end_date ? String(classItem.end_date).split("T")[0] : "",
       status: classItem.status || "PENDING"
     });
+    // Tự động cuộn lên form để người dùng thấy dữ liệu đã được load
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleClassDelete = async (classItem) => {
