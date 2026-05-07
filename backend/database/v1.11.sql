@@ -67,30 +67,17 @@ INSERT INTO contract_templates (name, template_type, template_file_url, descript
 ('Hợp đồng cung ứng', 'docx', 'templates/hop_dong_cung_ung.docx', 'Hợp đồng cung ứng lao động với đối tác')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
--- 6. Insert and Update fee_standards with rules from cases TH1-TH5
--- Initial entries
--- 6. Insert and Update fee_standards with rules from cases TH1-TH5
--- Using INSERT ... ON DUPLICATE KEY UPDATE for all standard fees
+-- 6. Insert and Update fee_standards with only 2 main events
+DELETE FROM fee_standards;
+ALTER TABLE fee_standards AUTO_INCREMENT = 1;
+
 INSERT INTO fee_standards (job_order_id, contract_type, fee_name, amount, fee_category, is_refundable_on_fail_exam, refund_pct_on_fail_exam, is_refundable_on_withdrawal, refund_pct_on_withdrawal, is_refundable_on_no_go, refund_pct_on_no_go, is_mandatory_for_exit, due_event) VALUES
+-- Event 1: ON_REGISTRATION (Tạo ứng viên)
 (NULL, NULL, 'Phí đăng ký hồ sơ', 500000.00, 'INITIAL', FALSE, 0.00, FALSE, 0.00, FALSE, 0.00, FALSE, 'ON_REGISTRATION'),
-(NULL, NULL, 'Phí dịch thuật / công chứng giấy tờ', 1000000.00, 'SERVICE', FALSE, 0.00, FALSE, 0.00, FALSE, 0.00, FALSE, 'BEFORE_DOC_SUBMISSION'),
-(NULL, NULL, 'Phí thi chứng chỉ chính thức', 2000000.00, 'CERTIFICATE', FALSE, 0.00, TRUE, 100.00, FALSE, 0.00, FALSE, 'BEFORE_OFFICIAL_CERT_EXAM'),
-(NULL, NULL, 'Phí làm visa / hộ chiếu', 1500000.00, 'VISA_PASSPORT', TRUE, 80.00, TRUE, 100.00, TRUE, 30.00, TRUE, 'BEFORE_VISA_APPLY'),
-(NULL, NULL, 'Phí bảo hiểm xuất cảnh', 3000000.00, 'INSURANCE', TRUE, 90.00, TRUE, 100.00, TRUE, 50.00, TRUE, 'BEFORE_DEPARTURE'),
-(NULL, 'Hợp đồng đào tạo', 'Học phí đào tạo ngoại ngữ / kỹ năng', 5000000.00, 'TRAINING', TRUE, 50.00, TRUE, 65.00, FALSE, 0.00, FALSE, 'ON_CONTRACT_SIGN'),
-(NULL, 'Thỏa thuận dịch vụ', 'Phí môi giới / dịch vụ (Đợt 1)', 10000000.00, 'SERVICE', TRUE, 60.00, TRUE, 70.00, TRUE, 25.00, TRUE, 'ON_CONTRACT_SIGN'),
-(NULL, 'Thỏa thuận dịch vụ', 'Tiền cọc cam kết / cọc chống trốn', 20000000.00, 'DEPOSIT', TRUE, 100.00, TRUE, 50.00, FALSE, 0.00, TRUE, 'ON_CONTRACT_SIGN'),
-(NULL, NULL, 'Phí khám sức khỏe', 800000.00, 'INITIAL', FALSE, 0.00, FALSE, 0.00, FALSE, 0.00, TRUE, 'BEFORE_HEALTH_CHECK'),
-(NULL, NULL, 'Phí thi kiểm tra nội bộ', 300000.00, 'INITIAL', FALSE, 0.00, TRUE, 100.00, FALSE, 0.00, FALSE, 'BEFORE_INTERNAL_EXAM'),
-(NULL, NULL, 'Phí hồ sơ (Cọc đợt 1)', 2000000.00, 'INITIAL', TRUE, 100.00, TRUE, 80.00, FALSE, 0.00, TRUE, 'ON_PASSED_EXAM')
-ON DUPLICATE KEY UPDATE 
-    amount = VALUES(amount),
-    fee_category = VALUES(fee_category),
-    is_refundable_on_fail_exam = VALUES(is_refundable_on_fail_exam),
-    refund_pct_on_fail_exam = VALUES(refund_pct_on_fail_exam),
-    is_refundable_on_withdrawal = VALUES(is_refundable_on_withdrawal),
-    refund_pct_on_withdrawal = VALUES(refund_pct_on_withdrawal),
-    is_refundable_on_no_go = VALUES(is_refundable_on_no_go),
-    refund_pct_on_no_go = VALUES(refund_pct_on_no_go),
-    is_mandatory_for_exit = VALUES(is_mandatory_for_exit),
-    due_event = VALUES(due_event);
+(NULL, NULL, 'Phí dịch thuật / công chứng giấy tờ', 1000000.00, 'SERVICE', FALSE, 0.00, FALSE, 0.00, FALSE, 0.00, FALSE, 'ON_REGISTRATION'),
+
+-- Event 2: BEFORE_INTERNAL_EXAM (Trước khi thi)
+(NULL, NULL, 'Phí hồ sơ (Cọc đợt 1)', 2000000.00, 'INITIAL', TRUE, 100.00, TRUE, 80.00, FALSE, 0.00, TRUE, 'BEFORE_INTERNAL_EXAM'),
+(NULL, NULL, 'Học phí đào tạo ngoại ngữ / kỹ năng', 5000000.00, 'TRAINING', TRUE, 50.00, TRUE, 65.00, FALSE, 0.00, FALSE, 'BEFORE_INTERNAL_EXAM'),
+(NULL, NULL, 'Phí môi giới / dịch vụ (Đợt 1)', 10000000.00, 'SERVICE', TRUE, 60.00, TRUE, 70.00, TRUE, 25.00, TRUE, 'BEFORE_INTERNAL_EXAM'),
+(NULL, NULL, 'Tiền cọc cam kết / cọc chống trốn', 20000000.00, 'DEPOSIT', TRUE, 100.00, TRUE, 50.00, FALSE, 0.00, TRUE, 'BEFORE_INTERNAL_EXAM');

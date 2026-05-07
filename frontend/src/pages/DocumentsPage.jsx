@@ -32,7 +32,7 @@ const DOCUMENT_LABELS = {
   PRE_MARITAL_CONFIRM: "Giấy xác nhận tình trạng hôn nhân",
   PRE_HIGHEST_DEGREE: "Bằng tốt nghiệp cấp cao nhất",
   PRE_BIRTH_RESIDENCE_ID: "Giấy khai sinh, Xác nhận cư trú và CCCD",
-  PRE_PROFILE_PHOTO: "Ảnh hồ sơ đi Nhật",
+  PRE_PROFILE_PHOTO: "Ảnh thẻ",
   POST_PASSPORT: "Hộ chiếu",
   POST_VISA: "Visa",
   POST_COE: "Tư cách lưu trú (COE)",
@@ -657,8 +657,8 @@ function DocumentsPage() {
                     <strong>{readiness.required_total}</strong>
                   </div>
                   <div className="mini-stat">
-                    <span>Đã xác minh</span>
-                    <strong>{readiness.verified_total}</strong>
+                    <span>Đã nộp / xác minh</span>
+                    <strong>{readiness.submitted_total}</strong>
                   </div>
                   <div className="mini-stat">
                     <span>Đủ điều kiện ghép đơn</span>
@@ -708,7 +708,7 @@ function DocumentsPage() {
             <div className="roadmap-card">
               <ul className="inline-list">
                 <li>Khởi tạo checklist đúng giai đoạn trước khi cập nhật từng giấy tờ.</li>
-                <li>Những giấy tờ bắt buộc phải đạt trạng thái Đã xác minh trước khi ghép đơn.</li>
+                <li>Những giấy tờ bắt buộc phải đạt trạng thái Đã nộp hoặc Đã xác minh trước khi ghép đơn.</li>
                 <li>Sau khi ứng viên đỗ, chuyển sang giai đoạn hậu thi để theo dõi visa, hộ chiếu và COE.</li>
               </ul>
             </div>

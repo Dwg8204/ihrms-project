@@ -29,5 +29,15 @@ export const partnerService = {
   createContact: async (partnerId, payload) => {
     const { data } = await api.post(`/partners/${partnerId}/contacts`, payload);
     return data;
+  },
+
+  updateContact: async (partnerId, contactId, payload) => {
+    const { data } = await api.patch(`/partners/${partnerId}/contacts/${contactId}`, payload);
+    return data;
+  },
+
+  deleteContact: async (partnerId, contactId) => {
+    const { data } = await api.delete(`/partners/${partnerId}/contacts/${contactId}`);
+    return data;
   }
 };

@@ -211,9 +211,8 @@ const classController = {
       }
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'start_date')) {
-        if (req.body.start_date) {
-          validateStartDateAfterToday(req.body.start_date);
-        }
+        // Bỏ qua kiểm tra validateStartDateAfterToday khi cập nhật lớp học 
+        // để cho phép giữ ngày cũ hoặc cập nhật cho các lớp đã khai giảng.
         payload.start_date = req.body.start_date || null;
       }
 

@@ -29,10 +29,6 @@ const initialPartnerForm = {
   name: '',
   country: '',
   address: '',
-  contact_person: '',
-  phone: '',
-  email: '',
-  reputation_score: 7,
   status: 'ACTIVE'
 };
 
@@ -51,7 +47,7 @@ const initialJobForm = {
   salary_info: '',
   deadline: '',
   status: 'OPEN',
-  req_age_min: '',
+  req_age_min: 18,
   req_age_max: '',
   req_gender: 'any',
   req_education: [],
@@ -142,12 +138,12 @@ function formatRequirementText(requirementsRaw, educationNameMap) {
   const requirements = safeJsonParse(requirementsRaw, {});
   const lines = [];
 
-  const minAge = requirements?.age?.min;
-  const maxAge = requirements?.age?.max;
-  if (minAge !== undefined || maxAge !== undefined) {
-    const from = minAge !== undefined ? minAge : 'không giới hạn';
-    const to = maxAge !== undefined ? maxAge : 'không giới hạn';
-    lines.push(`Độ tuổi: từ ${from} đến ${to}`);
+  const ageMin = requirements?.age?.min || 18;
+  const ageMax = requirements?.age?.max;
+  if (ageMax) {
+    lines.push(`Độ tuổi: từ ${ageMin} đến ${ageMax}`);
+  } else {
+    lines.push(`Độ tuổi: từ ${ageMin} trở lên`);
   }
 
   if (requirements?.gender && requirements.gender !== 'any') {
@@ -208,7 +204,12 @@ function validateJobForm(form) {
   const ageMax = String(form.req_age_max || '').trim();
   if (ageMin && !isNonNegativeNumber(ageMin)) return 'Tuổi tối thiểu phải là số không âm.';
   if (ageMax && !isNonNegativeNumber(ageMax)) return 'Tuổi tối đa phải là số không âm.';
-  if (ageMin && ageMax && Number(ageMin) > Number(ageMax)) return 'Tuổi tối thiểu không được lớn hơn tuổi tối đa.';
+  if (String(form.req_age_min || '').trim() && Number(form.req_age_min) < 18) {
+    return 'Độ tuổi tối thiểu phải từ 18 trở lên.';
+  }
+  if (String(form.req_age_max || '').trim() && Number(form.req_age_max) < Number(form.req_age_min || 18)) {
+    return 'Độ tuổi tối đa không được nhỏ hơn độ tuổi tối thiểu.';
+  }
 
   if (String(form.req_experience_min || '').trim() && !isNonNegativeNumber(form.req_experience_min)) {
     return 'Kinh nghiệm tối thiểu phải là số không âm.';
@@ -218,6 +219,9 @@ function validateJobForm(form) {
   }
   if (String(form.req_weight_min || '').trim() && !isNonNegativeNumber(form.req_weight_min)) {
     return 'Cân nặng tối thiểu phải là số không âm.';
+  }
+  if (String(form.salary_info || '').trim() && !isNonNegativeNumber(form.salary_info)) {
+    return 'Mức lương phải là số không âm.';
   }
 
   return '';
@@ -272,9 +276,14 @@ function PartnersJobsPage() {
   const [manualEducationFilter, setManualEducationFilter] = useState('');
 
   const [partnerForm, setPartnerForm] = useState(initialPartnerForm);
+  const [partnerEditForm, setPartnerEditForm] = useState(initialPartnerForm);
   const [contactForm, setContactForm] = useState(initialContactForm);
+  const [contactEditForm, setContactEditForm] = useState(initialContactForm);
   const [jobForm, setJobForm] = useState(initialJobForm);
   const [jobEditForm, setJobEditForm] = useState(initialJobForm);
+  
+  const [partnerEditOpen, setPartnerEditOpen] = useState(false);
+  const [contactEditOpen, setContactEditOpen] = useState(false);
   const [jobDetailOpen, setJobDetailOpen] = useState(false);
   const [jobEditOpen, setJobEditOpen] = useState(false);
   const [jobDetailLoading, setJobDetailLoading] = useState(false);
@@ -407,6 +416,7 @@ function PartnersJobsPage() {
   };
 
   const handleDeletePartner = async (id) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa đối tác này?')) return;
     try {
       await partnerService.deletePartner(id);
       if (String(selectedPartnerId) === String(id)) {
@@ -415,6 +425,35 @@ function PartnersJobsPage() {
       }
       await loadPartners();
       showSuccess('Đã xóa đối tác.');
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const openPartnerEditModal = (partner) => {
+    setPartnerEditForm({
+      name: partner.name || '',
+      country: partner.country || '',
+      address: partner.address || '',
+      status: partner.status || 'ACTIVE'
+    });
+    setSelectedPartnerId(partner.id);
+    setPartnerEditOpen(true);
+  };
+
+  const handleUpdatePartner = async (event) => {
+    event.preventDefault();
+    const validationMessage = validatePartnerForm(partnerEditForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
+    try {
+      await partnerService.updatePartner(selectedPartnerId, partnerEditForm);
+      setPartnerEditOpen(false);
+      await loadPartners();
+      showSuccess('Đã cập nhật đối tác.');
     } catch (err) {
       showError(err);
     }
@@ -442,6 +481,48 @@ function PartnersJobsPage() {
       setContactForm(initialContactForm);
       await loadContacts(selectedPartnerId);
       showSuccess('Đã thêm liên hệ.');
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const openContactEditModal = (contact) => {
+    setContactEditForm({
+      contact_name: contact.contact_name || '',
+      contact_phone: contact.contact_phone || '',
+      contact_email: contact.contact_email || '',
+      contact_role: contact.contact_role || '',
+      is_primary: Boolean(contact.is_primary)
+    });
+    setContactEditOpen(true);
+    // Lưu ID liên hệ đang sửa vào một state tạm nếu cần, ở đây ta có thể dùng contact.id trực tiếp
+    setContactEditForm(prev => ({ ...prev, id: contact.id }));
+  };
+
+  const handleUpdateContact = async (event) => {
+    event.preventDefault();
+    const validationMessage = validateContactForm(contactEditForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
+    try {
+      await partnerService.updateContact(selectedPartnerId, contactEditForm.id, contactEditForm);
+      setContactEditOpen(false);
+      await loadContacts(selectedPartnerId);
+      showSuccess('Đã cập nhật liên hệ.');
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  const handleDeleteContact = async (contactId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa liên hệ này?')) return;
+    try {
+      await partnerService.deleteContact(selectedPartnerId, contactId);
+      await loadContacts(selectedPartnerId);
+      showSuccess('Đã xóa liên hệ.');
     } catch (err) {
       showError(err);
     }
@@ -671,47 +752,7 @@ function PartnersJobsPage() {
                   }
                 />
               </label>
-              <label>
-                Người liên hệ
-                <input
-                  value={partnerForm.contact_person}
-                  onChange={(e) =>
-                    setPartnerForm((prev) => ({ ...prev, contact_person: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                Điện thoại
-                <input
-                  value={partnerForm.phone}
-                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))}
-                  inputMode="numeric"
-                  pattern="0\d{9}"
-                  maxLength={10}
-                  placeholder="0901234567"
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={partnerForm.email}
-                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, email: e.target.value }))}
-                />
-              </label>
-              <label>
-                Điểm uy tín
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={partnerForm.reputation_score}
-                  onChange={(e) =>
-                    setPartnerForm((prev) => ({ ...prev, reputation_score: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
+              <label className="field-span-2">
                 Trạng thái
                 <select
                   value={partnerForm.status}
@@ -736,10 +777,10 @@ function PartnersJobsPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Tên</th>
+                    <th>Đối tác</th>
                     <th>Trạng thái</th>
-                    <th>Điểm</th>
-                    <th>Số liên hệ</th>
+                    <th>Liên hệ chính</th>
+                    <th>Số điện thoại</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -752,8 +793,8 @@ function PartnersJobsPage() {
                         <span className="tiny">{partner.country || '-'}</span>
                       </td>
                       <td>{PARTNER_STATUS_LABELS[partner.status] || partner.status}</td>
-                      <td>{partner.reputation_score ?? '-'}</td>
-                      <td>{partner.total_contacts || 0}</td>
+                      <td>{partner.contact_person || '-'}</td>
+                      <td>{partner.phone || '-'}</td>
                       <td>
                         <div className="row-actions">
                           <button
@@ -766,6 +807,13 @@ function PartnersJobsPage() {
                             }}
                           >
                             Liên hệ
+                          </button>
+                          <button
+                            className="btn small ghost"
+                            type="button"
+                            onClick={() => openPartnerEditModal(partner)}
+                          >
+                            Sửa
                           </button>
                           <button
                             className="btn text danger"
@@ -882,6 +930,7 @@ function PartnersJobsPage() {
                     <th>Chức vụ</th>
                     <th>Điện thoại</th>
                     <th>Chính</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -891,6 +940,24 @@ function PartnersJobsPage() {
                       <td>{row.contact_role || '-'}</td>
                       <td>{row.contact_phone || '-'}</td>
                       <td>{row.is_primary ? 'Có' : 'Không'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            className="btn small ghost"
+                            type="button"
+                            onClick={() => openContactEditModal(row)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            className="btn text danger"
+                            type="button"
+                            onClick={() => handleDeleteContact(row.id)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {!contacts.length ? (
@@ -950,6 +1017,8 @@ function PartnersJobsPage() {
               <label>
                 Mức lương
                 <input
+                  type="number"
+                  min="0"
                   value={jobForm.salary_info}
                   onChange={(e) => setJobForm((prev) => ({ ...prev, salary_info: e.target.value }))}
                 />
@@ -1520,6 +1589,8 @@ function PartnersJobsPage() {
             <label>
               Mức lương
               <input
+                type="number"
+                min="0"
                 value={jobEditForm.salary_info}
                 onChange={(e) => setJobEditForm((prev) => ({ ...prev, salary_info: e.target.value }))}
               />
@@ -1700,6 +1771,109 @@ function PartnersJobsPage() {
             </div>
           </form>
         ) : null}
+      </DetailModal>
+
+      <DetailModal
+        open={partnerEditOpen}
+        title="Sửa thông tin đối tác"
+        onClose={() => setPartnerEditOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleUpdatePartner}>
+          <label>
+            Tên đối tác
+            <input
+              required
+              value={partnerEditForm.name}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+          </label>
+          <label>
+            Quốc gia
+            <input
+              value={partnerEditForm.country}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, country: e.target.value }))}
+            />
+          </label>
+          <label className="field-span-2">
+            Địa chỉ
+            <input
+              value={partnerEditForm.address}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, address: e.target.value }))}
+            />
+          </label>
+          <label className="field-span-2">
+            Trạng thái
+            <select
+              value={partnerEditForm.status}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, status: e.target.value }))}
+            >
+              {PARTNER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {PARTNER_STATUS_LABELS[status] || status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn field-span-2" type="submit">
+            Cập nhật đối tác
+          </button>
+        </form>
+      </DetailModal>
+
+      <DetailModal
+        open={contactEditOpen}
+        title="Sửa liên hệ đối tác"
+        onClose={() => setContactEditOpen(false)}
+      >
+        <form className="grid-form" onSubmit={handleUpdateContact}>
+          <label>
+            Tên liên hệ
+            <input
+              required
+              value={contactEditForm.contact_name}
+              onChange={(e) => setContactEditForm((prev) => ({ ...prev, contact_name: e.target.value }))}
+            />
+          </label>
+          <label>
+            Chức vụ
+            <input
+              value={contactEditForm.contact_role}
+              onChange={(e) => setContactEditForm((prev) => ({ ...prev, contact_role: e.target.value }))}
+            />
+          </label>
+          <label>
+            Điện thoại
+            <input
+              value={contactEditForm.contact_phone}
+              onChange={(e) =>
+                setContactEditForm((prev) => ({ ...prev, contact_phone: digitsOnly(e.target.value, 10) }))
+              }
+              inputMode="numeric"
+              pattern="0\d{9}"
+              maxLength={10}
+              placeholder="0901234567"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={contactEditForm.contact_email}
+              onChange={(e) => setContactEditForm((prev) => ({ ...prev, contact_email: e.target.value }))}
+            />
+          </label>
+          <label>
+            Liên hệ chính
+            <input
+              type="checkbox"
+              checked={contactEditForm.is_primary}
+              onChange={(e) => setContactEditForm((prev) => ({ ...prev, is_primary: e.target.checked }))}
+            />
+          </label>
+          <button className="btn field-span-2" type="submit">
+            Cập nhật liên hệ
+          </button>
+        </form>
       </DetailModal>
     </section>
   );

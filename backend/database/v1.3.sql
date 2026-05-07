@@ -15,11 +15,7 @@ CREATE TABLE partner_contacts (
     UNIQUE KEY uq_partner_contact (partner_id, contact_name) -- Đảm bảo tên người liên hệ duy nhất cho mỗi đối tác
 );
 
--- 2. Thêm cột reputation_score vào bảng partners
-ALTER TABLE partners
-ADD COLUMN reputation_score INT NULL AFTER status; -- Có thể là NULL ban đầu, sau này có thể đặt NOT NULL với giá trị mặc định
-
--- 3. Cập nhật kiểu dữ liệu của cột requirements trong job_orders thành JSON
+-- 2. Cập nhật kiểu dữ liệu của cột requirements trong job_orders thành JSON
 -- Lưu ý: Nếu cột đã có dữ liệu TEXT, có thể cần chuyển đổi thủ công hoặc đảm bảo dữ liệu hiện có hợp lệ JSON.
 ALTER TABLE job_orders
-MODIFY COLUMN requirements JSON;
+MODIFY COLUMN requirements JSON;

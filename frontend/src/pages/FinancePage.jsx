@@ -57,9 +57,12 @@ function FinancePage() {
   const loadJobOrders = async () => {
     try {
       const res = await jobOrderService.getJobOrders({ limit: 500 });
+      // API returns { success: true, data: [...], pagination: {...} }
+      // So res.data is the array we need
       setJobOrders(res.data || []);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load job orders for finance:", err);
+      toast.error("Không thể tải danh sách đơn hàng.");
     }
   };
 
