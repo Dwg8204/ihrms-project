@@ -525,7 +525,7 @@ function Module3Page() {
       <div className="surface">
         <SectionHeader
           title={t("module3.title")}
-          subtitle={t("module3.subtitle")}
+    
           action={
             <button type="button" className="btn ghost" onClick={loadMasterData}>
               {t("common.refresh")}

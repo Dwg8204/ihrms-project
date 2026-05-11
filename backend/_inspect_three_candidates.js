@@ -15,7 +15,6 @@ async function run() {
     WHERE c.full_name IN ('Nguyễn Bá Dương', 'Đoàn Thị Diễm', 'Bùi Ngọc Vũ')
     ORDER BY c.id, ea.id`
   );
-
   console.table(rows);
 }
 

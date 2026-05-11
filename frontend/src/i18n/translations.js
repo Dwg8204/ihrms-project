@@ -132,7 +132,7 @@ export const translations = {
     },
     module3: {
       title: "Lịch thi & Đào tạo",
-      subtitle: "Quản lý lịch thi, đào tạo và theo dõi công việc trong một nơi.",
+     
       tabExamList: "Danh sách thi",
       tabExamResult: "Kết quả thi",
       tabTraining: "Đào tạo",
@@ -308,7 +308,6 @@ export const translations = {
     },
     module3: {
       title: "Module 3 Workspace",
-      subtitle: "Manage exam schedules, training records, and project tracking in one place.",
       tabExamList: "Exam List",
       tabExamResult: "Exam Result",
       tabTraining: "Training",

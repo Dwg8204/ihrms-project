@@ -208,8 +208,9 @@ function Sidebar({ user, onLogout }) {
           </nav>
         ) : (
           <>
-            {menuSections.map((section) => (
+            {menuSections.map((section, idx) => (
               <section key={section.label} className="sidebar__menu-section">
+                {idx > 0 ? <hr className="sidebar__section-divider" /> : null}
                 <div className="sidebar__section-header">
                   <div className="sidebar__section-label">{section.label}</div>
                   <span className="sidebar__section-action">

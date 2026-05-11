@@ -419,7 +419,7 @@ function EmailPage() {
       <div className="surface">
         <SectionHeader
           title="Mail Center"
-          subtitle="Quản lý mẫu email và lịch sử gửi"
+        
           action={
             <button className="btn ghost" type="button" onClick={reloadData}>
               Làm mới
