@@ -404,7 +404,6 @@ function Module4Page() {
       <div className="surface">
         <SectionHeader
           title="Quản lý Hợp đồng & Mẫu hợp đồng"
-          subtitle="Tạo lập, quản lý các bản ghi hợp đồng và mẫu tài liệu docx tự động"
           action={
             <div className="inline-form">
               <button

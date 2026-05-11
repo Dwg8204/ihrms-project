@@ -1,7 +1,10 @@
-const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: './backend/.env' });
+const { createRequire } = require('module');
+
+const backendRequire = createRequire(path.join(__dirname, 'backend', 'package.json'));
+const mysql = backendRequire('mysql2/promise');
+backendRequire('dotenv').config({ path: path.join(__dirname, 'backend', '.env') });
 
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
@@ -55,8 +58,8 @@ async function reset() {
             console.log(`✅ ${file} completed.`);
         }
 
-        // 4. Run additional seeds if they exist
-        const seedFiles = ['seed_test.sql']; 
+        // 4. Optional legacy seeds (disabled by default to avoid mixing with v1.17 dataset)
+        const seedFiles = process.env.RUN_LEGACY_SEED_TEST === '1' ? ['seed_test.sql'] : [];
         for (const seed of seedFiles) {
             const seedPath = path.join(SQL_DIR, seed);
             if (fs.existsSync(seedPath)) {

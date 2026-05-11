@@ -166,7 +166,6 @@ function FinancePage() {
       <div className="surface">
         <SectionHeader
           title="Quản lý Tài chính & Phí dịch vụ"
-          subtitle="Thiết lập các loại phí, định mức bồi hoàn và theo dõi dòng tiền"
           action={
             activeTab === "standards" && (
               <button className="btn" onClick={handleOpenCreateFee}>

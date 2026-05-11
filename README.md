@@ -99,6 +99,13 @@ PORT=5000
 npm run dev
 ```
 
+5) Reset database + nap bo du lieu mau lien ket day du (khuyen dung khi moi pull code)
+```
+npm run reset:db
+```
+
+Lenh tren se xoa toan bo du lieu nghiep vu cu va nap lai dataset thuc te theo migration `v1.17_seed_realistic_dataset.sql`.
+
 ### Frontend
 1) Cai dat phu thuoc
 ```

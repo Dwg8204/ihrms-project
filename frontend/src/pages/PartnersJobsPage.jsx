@@ -183,6 +183,8 @@ function formatRequirementText(requirementsRaw, educationNameMap) {
   return lines.length ? lines : ['Không có yêu cầu cụ thể.'];
 }
 
+const COMPLETED_JOB_ORDER_STATUSES = new Set(['CLOSED', 'FILLED', 'CANCELLED', 'EXPIRED']);
+
 function validateJobForm(form) {
   if (!form.partner_id) {
     return 'Vui lòng chọn đối tác.';
@@ -296,9 +298,14 @@ function PartnersJobsPage() {
     { key: 'manual', label: 'Ghép thủ công ứng viên' }
   ];
 
+  const availableJobOrdersForMatching = useMemo(
+    () => jobOrders.filter((item) => !COMPLETED_JOB_ORDER_STATUSES.has(item.status)),
+    [jobOrders]
+  );
+
   const selectedJob = useMemo(
-    () => jobOrders.find((item) => String(item.id) === String(selectedJobOrderId)),
-    [jobOrders, selectedJobOrderId]
+    () => availableJobOrdersForMatching.find((item) => String(item.id) === String(selectedJobOrderId)),
+    [availableJobOrdersForMatching, selectedJobOrderId]
   );
 
   const educationNameMap = useMemo(() => {
@@ -392,6 +399,17 @@ function PartnersJobsPage() {
     reloadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selectedJobOrderId) return;
+    const stillAvailable = availableJobOrdersForMatching.some(
+      (item) => String(item.id) === String(selectedJobOrderId)
+    );
+    if (!stillAvailable) {
+      setSelectedJobOrderId('');
+      setMatchingResult([]);
+    }
+  }, [selectedJobOrderId, availableJobOrdersForMatching]);
 
   const handleCreatePartner = async (event) => {
     event.preventDefault();
@@ -651,6 +669,14 @@ function PartnersJobsPage() {
       return;
     }
 
+    const selectedAvailableJob = availableJobOrdersForMatching.find(
+      (item) => String(item.id) === String(selectedJobOrderId)
+    );
+    if (!selectedAvailableJob) {
+      toast.error('Đơn hàng đã hoàn thành hoặc không còn khả dụng để đối khớp.');
+      return;
+    }
+
     try {
       const res = await jobOrderService.getMatchingCandidates(selectedJobOrderId, {
         page: 1,
@@ -689,6 +715,14 @@ function PartnersJobsPage() {
   const handleManualMatch = async (candidateId) => {
     if (!selectedJobOrderId) {
       toast.error('Vui lòng chọn đơn hàng trước khi thêm ứng viên.');
+      return;
+    }
+
+    const selectedAvailableJob = availableJobOrdersForMatching.find(
+      (item) => String(item.id) === String(selectedJobOrderId)
+    );
+    if (!selectedAvailableJob) {
+      toast.error('Đơn hàng đã hoàn thành hoặc không còn khả dụng để ghép thủ công.');
       return;
     }
 
@@ -752,6 +786,35 @@ function PartnersJobsPage() {
                   }
                 />
               </label>
+              <label>
+                Người liên hệ
+                <input
+                  value={partnerForm.contact_person}
+                  onChange={(e) =>
+                    setPartnerForm((prev) => ({ ...prev, contact_person: e.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Điện thoại
+                <input
+                  value={partnerForm.phone}
+                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))}
+                  inputMode="numeric"
+                  pattern="0\d{9}"
+                  maxLength={10}
+                  placeholder="0901234567"
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={partnerForm.email}
+                  onChange={(e) => setPartnerForm((prev) => ({ ...prev, email: e.target.value }))}
+                />
+              </label>
+          
               <label className="field-span-2">
                 Trạng thái
                 <select
@@ -904,8 +967,8 @@ function PartnersJobsPage() {
                   }
                 />
               </label>
-              <label>
-                Liên hệ chính
+              <label className="checkbox-field">
+                <span>Liên hệ chính</span>
                 <input
                   type="checkbox"
                   checked={contactForm.is_primary}
@@ -1195,6 +1258,7 @@ function PartnersJobsPage() {
                           <button
                             className="btn small"
                             type="button"
+                            disabled={COMPLETED_JOB_ORDER_STATUSES.has(job.status)}
                             onClick={() => {
                               setSelectedJobOrderId(job.id);
                               setActiveTab('matching');
@@ -1238,9 +1302,9 @@ function PartnersJobsPage() {
                   onChange={(e) => setSelectedJobOrderId(e.target.value)}
                 >
                   <option value="">Chọn đơn hàng</option>
-                  {jobOrders.map((job) => (
+                  {availableJobOrdersForMatching.map((job) => (
                     <option key={job.id} value={job.id}>
-                      #{job.id} {job.job_title}
+                      {job.job_title}
                     </option>
                   ))}
                 </select>
@@ -1323,9 +1387,9 @@ function PartnersJobsPage() {
                   onChange={(e) => setSelectedJobOrderId(e.target.value)}
                 >
                   <option value="">Chọn đơn hàng để thêm ứng viên</option>
-                  {jobOrders.map((job) => (
+                  {availableJobOrdersForMatching.map((job) => (
                     <option key={job.id} value={job.id}>
-                      #{job.id} {job.job_title}
+                    {job.job_title}
                     </option>
                   ))}
                 </select>
@@ -1862,8 +1926,8 @@ function PartnersJobsPage() {
               onChange={(e) => setContactEditForm((prev) => ({ ...prev, contact_email: e.target.value }))}
             />
           </label>
-          <label>
-            Liên hệ chính
+          <label className="checkbox-field">
+            <span>Liên hệ chính</span>
             <input
               type="checkbox"
               checked={contactEditForm.is_primary}

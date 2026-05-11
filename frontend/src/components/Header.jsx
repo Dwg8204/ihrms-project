@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/Header.css";
 import { useI18n } from "../i18n/I18nProvider";
+import { recruitmentService } from "../services/recruitmentService";
+import { partnerService } from "../services/partnerService";
+import { jobOrderService } from "../services/jobOrderService";
 
 const MoonIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" className="header__icon-svg">
@@ -52,6 +56,27 @@ const BellIcon = () => (
   </svg>
 );
 
+const SearchIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="header__icon-svg">
+    <path
+      d="M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="m20 20-3.5-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CustomizeIcon = ({ children }) => (
   <span className="header__customize-icon">{children}</span>
 );
@@ -73,7 +98,99 @@ const colorOptions = [
 
 function Header({ customizer, setCustomizer }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const searchInputRef = useRef(null);
+  const searchBoxRef = useRef(null);
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [searchResults, setSearchResults] = useState({
+    candidates: [],
+    partners: [],
+    jobOrders: []
+  });
+
+  useEffect(() => {
+    const onGlobalSearchShortcut = (event) => {
+      const isSearchShortcut =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
+
+      if (!isSearchShortcut) return;
+
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+
+    window.addEventListener("keydown", onGlobalSearchShortcut);
+    return () => window.removeEventListener("keydown", onGlobalSearchShortcut);
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (event) => {
+      if (!searchBoxRef.current?.contains(event.target)) {
+        setShowSearchPanel(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const keyword = searchKeyword.trim();
+
+    if (keyword.length < 2) {
+      setSearchLoading(false);
+      setSearchResults({ candidates: [], partners: [], jobOrders: [] });
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const [candidateRes, partnerRes, jobRes] = await Promise.all([
+          recruitmentService.getCandidates({ page: 1, limit: 10, search: keyword }),
+          partnerService.getPartners({ page: 1, limit: 10, search: keyword }),
+          jobOrderService.getJobOrders({ page: 1, limit: 10, search: keyword })
+        ]);
+
+        if (cancelled) return;
+
+        setSearchResults({
+          candidates: Array.isArray(candidateRes?.data) ? candidateRes.data : [],
+          partners: Array.isArray(partnerRes?.data) ? partnerRes.data : [],
+          jobOrders: Array.isArray(jobRes?.data) ? jobRes.data : []
+        });
+      } catch (_error) {
+        if (!cancelled) {
+          setSearchResults({ candidates: [], partners: [], jobOrders: [] });
+        }
+      } finally {
+        if (!cancelled) {
+          setSearchLoading(false);
+        }
+      }
+    }, 260);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchKeyword]);
+
+  const hasSearchData =
+    searchResults.candidates.length > 0 ||
+    searchResults.partners.length > 0 ||
+    searchResults.jobOrders.length > 0;
+
+  const handlePickSearchItem = (path) => {
+    navigate(path);
+    setShowSearchPanel(false);
+  };
 
   const panelClassName = useMemo(
     () => `header__customize-panel app-customizer--${customizer.color}`,
@@ -153,10 +270,112 @@ function Header({ customizer, setCustomizer }) {
         </div>
 
         <div className="header__center">
-          <div className="header__search">
-            <span className="header__icon header__search-icon">S</span>
-            <input type="text" placeholder={t("header.searchPlaceholder")} />
-            <span className="header__search-shortcut">Ctrl K</span>
+          <div className="header__search-wrap" ref={searchBoxRef}>
+            <div className="header__search">
+            <span className="header__search-icon">
+              <SearchIcon />
+            </span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchKeyword}
+              onFocus={() => setShowSearchPanel(true)}
+              onChange={(event) => {
+                setSearchKeyword(event.target.value);
+                setShowSearchPanel(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setShowSearchPanel(false);
+                  searchInputRef.current?.blur();
+                  return;
+                }
+
+                if (event.key === "Enter" && searchResults.candidates[0]?.id) {
+                  handlePickSearchItem(`/module-1?candidateId=${searchResults.candidates[0].id}`);
+                }
+              }}
+              placeholder={t("header.searchPlaceholder")}
+              aria-label={t("header.searchPlaceholder")}
+            />
+            </div>
+
+            {showSearchPanel ? (
+              <div className="header__search-panel">
+                {searchKeyword.trim().length < 2 ? (
+                  <p className="header__search-empty">Nhập ít nhất 2 ký tự để tìm nhanh ứng viên, đối tác, đơn hàng.</p>
+                ) : searchLoading ? (
+                  <p className="header__search-empty">Đang tìm kiếm...</p>
+                ) : !hasSearchData ? (
+                  <p className="header__search-empty">Không có kết quả phù hợp.</p>
+                ) : (
+                  <>
+                    {searchResults.candidates.length ? (
+                      <div className="header__search-group">
+                        <h4>Ứng viên ({searchResults.candidates.length})</h4>
+                        {searchResults.candidates.map((item) => (
+                          <button
+                            key={`candidate-${item.id}`}
+                            type="button"
+                            className="header__search-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handlePickSearchItem(`/module-1?candidateId=${item.id}`)}
+                          >
+                            <span className="header__search-item-title">{item.full_name || "Ứng viên"}</span>
+                            <div className="header__search-item-meta">
+                              <small>{item.phone || item.citizen_id || "Không có mã"}</small>
+                              <small>{item.source_name || ""}</small>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {searchResults.partners.length ? (
+                      <div className="header__search-group">
+                        <h4>Đối tác ({searchResults.partners.length})</h4>
+                        {searchResults.partners.map((item) => (
+                          <button
+                            key={`partner-${item.id}`}
+                            type="button"
+                            className="header__search-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handlePickSearchItem(`/module-2?partnerId=${item.id}`)}
+                          >
+                            <span className="header__search-item-title">{item.name || "Đối tác"}</span>
+                            <div className="header__search-item-meta">
+                              <small>{item.country || ""}</small>
+                              <small>{item.phone || item.email || ""}</small>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {searchResults.jobOrders.length ? (
+                      <div className="header__search-group">
+                        <h4>Đơn hàng ({searchResults.jobOrders.length})</h4>
+                        {searchResults.jobOrders.map((item) => (
+                          <button
+                            key={`job-${item.id}`}
+                            type="button"
+                            className="header__search-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handlePickSearchItem(`/module-2?jobOrderId=${item.id}`)}
+                          >
+                            <span className="header__search-item-title">{item.job_title || "Đơn hàng"}</span>
+                            <div className="header__search-item-meta">
+                              <small>{item.partner_name || ""}</small>
+                              <small>{item.salary_info ? `${item.salary_info}` : item.matched_candidates_count ? `${item.matched_candidates_count} ứng viên phù hợp` : ""}</small>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 

@@ -46,9 +46,10 @@ function AppLayout({ customizer, setCustomizer, authUser, onLogout }) {
   const layoutStyle = useMemo(
     () => ({
       display: "flex",
-      height: "calc(100vh - 72px)",
+      height: "calc(100vh - 56px)",
       minWidth: 0,
       overflow: "hidden",
+      overflowX: "hidden",
     }),
     []
   );
@@ -67,6 +68,7 @@ function AppLayout({ customizer, setCustomizer, authUser, onLogout }) {
       minHeight: 0,
       padding: densityPadding,
       overflowY: "auto",
+      overflowX: "hidden",
       overscrollBehavior: "contain",
       maxWidth: customizer.container === "boxed" ? "1320px" : "none",
       margin: customizer.container === "boxed" ? "0 auto" : "0",

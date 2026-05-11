@@ -194,6 +194,8 @@ function RecruitmentPage() {
   const [manualSendModalOpen, setManualSendModalOpen] = useState(false);
   const [manualTemplateId, setManualTemplateId] = useState('');
   const [manualSending, setManualSending] = useState(false);
+  const [draggingCandidate, setDraggingCandidate] = useState(null);
+  const [dragOverStatus, setDragOverStatus] = useState('');
 
   const [candidateDetail, setCandidateDetail] = useState(null);
   const [detailReadiness, setDetailReadiness] = useState(emptyReadiness);
@@ -591,8 +593,8 @@ function RecruitmentPage() {
     }
   };
 
-  const handleUpdateStatus = async (candidate) => {
-    const draft = getTransitionDraft(candidate);
+  const handleUpdateStatus = async (candidate, overrideDraft = {}) => {
+    const draft = { ...getTransitionDraft(candidate), ...overrideDraft };
     const targetStatus = draft.status || candidate.status;
 
     // Check if anything actually changed
@@ -664,6 +666,28 @@ function RecruitmentPage() {
     } catch (err) {
       showError(err);
     }
+  };
+
+  const handleDropToStatus = async (targetStatus) => {
+    const dragging = draggingCandidate;
+    setDragOverStatus('');
+    setDraggingCandidate(null);
+
+    if (!dragging || !targetStatus) return;
+    if (dragging.status === targetStatus) return;
+
+    const allowed = getAvailableTransitions(dragging.status);
+    if (!allowed.includes(targetStatus)) {
+      toast.error('Không thể kéo sang trạng thái này theo luồng hiện tại.');
+      return;
+    }
+
+    if (canUseExamCreation(targetStatus) || canUseExamResult(targetStatus)) {
+      toast.info('Trạng thái này cần thêm dữ liệu. Vui lòng cập nhật ở tab Danh sách ứng viên.');
+      return;
+    }
+
+    await handleUpdateStatus(dragging, { status: targetStatus });
   };
 
   const handleAddScheduleSubmit = async (e) => {
@@ -1011,62 +1035,9 @@ function RecruitmentPage() {
       </div>
 
       {activeTab === 'intake' ? (
-        <div className="surface two-col">
-          <div>
-            <SectionHeader title="Tiếp nhận và tạo hồ sơ" />
-            {renderCandidateForm(candidateForm, onCandidateField, 'Thêm ứng viên', handleCreateCandidate)}
-          </div>
-          <div>
-            <SectionHeader title="Thông tin đã tiếp nhận" />
-            {detailLoading ? <p className="muted">Đang tải chi tiết...</p> : null}
-            {candidateDetail ? (
-              <div className="roadmap-card">
-                <ul className="inline-list">
-                  <li>CCCD: {candidateDetail.citizen_id || '-'}</li>
-                  <li>Họ tên: {candidateDetail.full_name || '-'}</li>
-                  <li>Điện thoại: {candidateDetail.phone || '-'}</li>
-                  <li>Email: {candidateDetail.email || '-'}</li>
-                  <li>Nguồn: {candidateDetail.source_name || '-'}</li>
-                  <li>Trạng thái: {CANDIDATE_STATUS_LABELS[candidateDetail.status] || candidateDetail.status}</li>
-                </ul>
-                {candidateDetail.cv_file_url ? (
-                  <p style={{ marginTop: 12 }}>
-                    <a href={candidateDetail.cv_file_url} target="_blank" rel="noreferrer">
-                      Mở CV đã upload
-                    </a>
-                  </p>
-                ) : (
-                  <p className="muted" style={{ marginTop: 12 }}>
-                    Chưa có CV scan.
-                  </p>
-                )}
-                <div className="pill-list" style={{ marginTop: 12 }}>
-                  <div className="pill-item">
-                    <span>Hồ sơ pre-exam</span>
-                    <strong>
-                      {detailReadiness.verified_total}/{detailReadiness.required_total}
-                    </strong>
-                  </div>
-                  <div className="pill-item">
-                    <span>Đủ điều kiện ghép form</span>
-                    <strong>{detailReadiness.can_submit_profile ? 'Có' : 'Chưa'}</strong>
-                  </div>
-                </div>
-                {detailReadiness.missing_submitted_documents?.length ? (
-                  <div style={{ marginTop: 12 }}>
-                    <p className="tiny">Giấy tờ chưa đạt trạng thái đã nộp:</p>
-                    <ul className="inline-list">
-                      {detailReadiness.missing_submitted_documents.map((item) => (
-                        <li key={item.code || item.name}>{item.name || item.code}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="muted">Chọn một ứng viên để xem nhanh readiness và CV.</p>
-            )}
-          </div>
+        <div className="surface">
+          <SectionHeader title="Tiếp nhận và tạo hồ sơ" />
+          {renderCandidateForm(candidateForm, onCandidateField, 'Thêm ứng viên', handleCreateCandidate)}
         </div>
       ) : null}
 
@@ -1308,8 +1279,8 @@ function RecruitmentPage() {
                         </div>
                         {canUseExamCreation(draft.status || row.status) ? (
                           <div className="grid-form" style={{ marginTop: 10 }}>
-                            <label>
-                              Đơn hàng
+                            <label className="exam-slot-field">
+                              <span className="exam-slot-label">Đơn hàng OPEN</span>
                               <select
                                 value={draft.jobOrderId}
                                 onChange={(e) =>
@@ -1324,8 +1295,8 @@ function RecruitmentPage() {
                                 ))}
                               </select>
                             </label>
-                            <label>
-                              Ngày thi
+                            <label className="exam-slot-field">
+                              <span className="exam-slot-label">Ngày thi</span>
                               <input
                                 type="datetime-local"
                                 value={draft.examDate}
@@ -1401,105 +1372,33 @@ function RecruitmentPage() {
                     <h4>{CANDIDATE_STATUS_LABELS[column.status] || column.status}</h4>
                     <span>{column.items?.length || 0}</span>
                   </div>
-                  <div className="kanban-list">
+                  <div
+                    className={`kanban-list ${dragOverStatus === column.status ? 'kanban-list--drag-over' : ''}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDragOverStatus(column.status);
+                    }}
+                    onDragLeave={() => setDragOverStatus((current) => (current === column.status ? '' : current))}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleDropToStatus(column.status);
+                    }}
+                  >
                     {(column.items || []).map((item) => (
-                      <article key={item.id} className="kanban-card">
+                      <article
+                        key={item.id}
+                        className="kanban-card"
+                        draggable
+                        onDragStart={() => setDraggingCandidate(item)}
+                        onDragEnd={() => {
+                          setDraggingCandidate(null);
+                          setDragOverStatus('');
+                        }}
+                      >
                         <p className="kanban-title">{item.full_name}</p>
                         <p className="tiny">{item.phone || item.email || '-'}</p>
                         <p className="tiny">{item.source_name || '-'}</p>
                         <p className="tiny">Cập nhật: {formatDate(item.updated_at)}</p>
-                        <div className="status-inline" style={{ marginTop: 10 }}>
-                          <select
-                            value={getTransitionDraft(item.id, item.status).status || item.status}
-                            onChange={(e) =>
-                              setTransitionDraft(item.id, 'status', e.target.value, item.status)
-                            }
-                          >
-                            {CANDIDATE_STATUSES.map((status) => (
-                              <option key={status} value={status}>
-                                {CANDIDATE_STATUS_LABELS[status] || status}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="btn small"
-                            onClick={() => handleUpdateStatus(item)}
-                          >
-                            Cập nhật
-                          </button>
-                        </div>
-                        {canUseExamCreation(getTransitionDraft(item.id, item.status).status || item.status) ? (
-                          <div className="grid-form" style={{ marginTop: 10 }}>
-                            <label>
-                              Đơn hàng OPEN
-                              <select
-                                value={getTransitionDraft(item.id, item.status).jobOrderId}
-                                onChange={(e) =>
-                                  setTransitionDraft(item.id, 'jobOrderId', e.target.value, item.status)
-                                }
-                              >
-                                <option value="">Chọn đơn hàng</option>
-                                {openJobOrders.map((job) => (
-                                  <option key={job.id} value={job.id}>
-                                    {job.job_title} #{job.id}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label>
-                              Ngày thi
-                              <input
-                                type="datetime-local"
-                                value={getTransitionDraft(item.id, item.status).examDate}
-                                min={getCurrentDateTimeLocal()}
-                                onChange={(e) =>
-                                  setTransitionDraft(item.id, 'examDate', e.target.value, item.status)
-                                }
-                              />
-                            </label>
-                          </div>
-                        ) : null}
-                        {canUseExamResult(getTransitionDraft(item.id, item.status).status || item.status) ? (
-                          <div className="grid-form" style={{ marginTop: 10 }}>
-                            <label>
-                              Phiếu thi pending
-                              <select
-                                value={getTransitionDraft(item.id, item.status).examApplicationId}
-                                onChange={(e) =>
-                                  setTransitionDraft(
-                                    item.id,
-                                    'examApplicationId',
-                                    e.target.value,
-                                    item.status
-                                  )
-                                }
-                              >
-                                <option value="">Chọn phiếu thi</option>
-                                {(pendingExamByCandidate.get(String(item.id)) || []).map((app) => (
-                                  <option key={app.id} value={app.id}>
-                                    #{app.id} - {app.job_title}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                        ) : null}
-                        {getTransitionDraft(item.id, item.status).status === 'WITHDRAWN' ? (
-                          <div className="grid-form" style={{ marginTop: 10 }}>
-                            <label>
-                              Lý do rút hồ sơ
-                              <select
-                                value={getTransitionDraft(item.id, item.status).withdrawalReason}
-                                onChange={e => setTransitionDraft(item.id, 'withdrawalReason', e.target.value, item.status)}
-                              >
-                                <option value="TH2">Rút hồ sơ (Có báo trước)</option>
-                                <option value="TH3">Bỏ ngang (Không báo trước)</option>
-                                <option value="TH5">Trúng tuyển nhưng không đi</option>
-                              </select>
-                            </label>
-                          </div>
-                        ) : null}
                       </article>
                     ))}
                     {!column.items?.length ? <p className="tiny muted">Chưa có ứng viên.</p> : null}

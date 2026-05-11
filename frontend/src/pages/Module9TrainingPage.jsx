@@ -409,7 +409,6 @@ function Module9TrainingPage() {
       <div className="surface">
         <SectionHeader
           title="Quản lý đào tạo"
-          subtitle="Theo dõi giảng viên, lớp học và sĩ số theo luồng thao tác thống nhất với toàn hệ thống."
         />
         <div className="stats-grid module9-stats-grid">
           <div className="stat-card tone-ocean">

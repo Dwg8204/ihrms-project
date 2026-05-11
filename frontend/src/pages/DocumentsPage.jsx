@@ -371,7 +371,7 @@ function DocumentsPage() {
       <div className="surface">
         <SectionHeader
           title="Quản lý hồ sơ và thủ tục xuất cảnh"
-          subtitle="Quản lý checklist giấy tờ, điều kiện trước thi và cảnh báo tiến độ."
+          
           action={
             <button className="btn ghost" type="button" onClick={reloadCurrent}>
               Làm mới

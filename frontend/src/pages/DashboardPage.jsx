@@ -3,7 +3,40 @@ import SectionHeader from "../components/SectionHeader";
 import SegmentTabs from "../components/SegmentTabs";
 import { useToast } from "../components/ToastProvider";
 import StatCard from "../components/StatCard";
-import BarChart from "../components/BarChart";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  LabelList,
+} from "recharts";
+
+const CHART_COLORS = [
+  "#6366f1", "#3b82f6", "#f59e0b", "#8b5cf6",
+  "#10b981", "#ef4444", "#06b6d4", "#9ca3af",
+];
+const EXAM_COLORS = { Pass: "#10b981", Reserve: "#8b5cf6", Fail: "#ef4444", Pending: "#f59e0b" };
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 12px", boxShadow: "0 4px 12px rgba(0,0,0,.08)" }}>
+      {label ? <p style={{ margin: 0, fontWeight: 600, color: "#374151", fontSize: 13 }}>{label}</p> : null}
+      {payload.map((p) => (
+        <p key={p.name} style={{ margin: "2px 0", color: p.fill || p.color || "#6366f1", fontSize: 13 }}>
+          {p.name}: <b>{p.value}</b>
+        </p>
+      ))}
+    </div>
+  );
+}
 import { recruitmentService } from "../services/recruitmentService";
 import { documentService } from "../services/documentService";
 import { examApplicationService } from "../services/examApplicationService";
@@ -238,31 +271,67 @@ function DashboardPage() {
         {activeTab === "recruitment" ? (
           <div className="chart-surface">
             <h4>{t("dashboard.chartRecruitment")}</h4>
-            <BarChart
-              rows={candidateStatusBars}
-              valueKey="total"
-              labelKey="stage"
-              color="teal"
-            />
+            {candidateStatusBars.length ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={candidateStatusBars.map((r) => ({ name: r.stage, value: r.total }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={130}
+                    dataKey="value"
+                    paddingAngle={2}
+                  >
+                    {candidateStatusBars.map((entry, i) => (
+                      <Cell key={entry.stage} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <p className="muted">Chưa có dữ liệu.</p>}
           </div>
         ) : null}
 
         {activeTab === "finance" ? (
           <div className="chart-surface">
             <h4>{t("dashboard.chartFinance")}</h4>
-            <BarChart rows={examResultBars} valueKey="total" labelKey="status" color="sun" />
+            <ResponsiveContainer width="100%" height={280}>
+              <ReBarChart data={examResultBars} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="status" tick={{ fontSize: 13 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 13 }} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="total" name="Số lượng" radius={[6, 6, 0, 0]}>
+                  {examResultBars.map((entry, i) => (
+                    <Cell key={entry.status} fill={EXAM_COLORS[["Pass", "Reserve", "Fail", "Pending"][i]] || CHART_COLORS[i]} />
+                  ))}
+                </Bar>
+              </ReBarChart>
+            </ResponsiveContainer>
           </div>
         ) : null}
 
         {activeTab === "operation" ? (
           <div className="chart-surface">
             <h4>{t("dashboard.chartOperation")}</h4>
-            <BarChart
-              rows={operationBottleneckBars}
-              valueKey="total"
-              labelKey="stage"
-              color="danger"
-            />
+            <ResponsiveContainer width="100%" height={280}>
+              <ReBarChart
+                layout="vertical"
+                data={operationBottleneckBars}
+                margin={{ top: 0, right: 48, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="stage" tick={{ fontSize: 12 }} width={160} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="total" name="Số lượng" radius={[0, 6, 6, 0]} fill="#ef4444">
+                  <LabelList dataKey="total" position="right" style={{ fontSize: 12, fill: "#374151", fontWeight: 600 }} />
+                </Bar>
+              </ReBarChart>
+            </ResponsiveContainer>
           </div>
         ) : null}
       </div>

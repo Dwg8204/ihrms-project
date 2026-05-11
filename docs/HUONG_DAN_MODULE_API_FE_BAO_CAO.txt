@@ -1,0 +1,354 @@
+HUONG DAN HOC VA BAO CAO THEO MODULE (IHRMS)
+Ngay cap nhat: 2026-05-07
+
+====================================================
+1) Kien truc tong the va cach doc du an
+====================================================
+
+Stack:
+- Backend: Node.js + Express + MySQL (mysql2/promise)
+- Frontend: React + Vite + Axios
+- Upload file: multer + cloudinary
+
+Quy uoc Backend:
+- Route: dinh nghia endpoint HTTP
+- Controller: validate input, dieu huong nghiep vu, tra response
+- Model: thao tac SQL voi DB
+- Middleware: upload, xu ly loi
+
+Quy uoc Frontend:
+- services/*.js: dong goi API call
+- pages/*.jsx: xu ly state, form, action, goi service
+- components/*: UI tai su dung
+
+Data flow 1 request:
+FE Page -> FE Service -> HTTP client (axios) -> API Route -> Controller -> Model -> MySQL
+
+Dang response backend thuong gap:
+- Thanh cong: { success: true, data, message?, pagination?, summary? }
+- Loi: { success: false, message }
+
+====================================================
+2) Khung chuan de viet 1 module moi (API -> FE)
+====================================================
+
+Buoc 1. Database
+- Tao migration SQL (them bang, index, FK, unique)
+- Chay migration vao DB
+
+Buoc 2. Model (backend/models)
+- Viet ham CRUD + ham nghiep vu can thiet
+- Tach ro query list (co filter/page), query detail, create/update/delete
+
+Buoc 3. Controller (backend/controllers)
+- Parse req.params, req.query, req.body
+- Validate du lieu (format, range, business rule)
+- Goi model
+- Dung ma HTTP dung nghia: 200/201/400/404/409/500
+- Day loi qua next(error) de middleware xu ly
+
+Buoc 4. Route (backend/routes)
+- Mapping endpoint -> controller
+- Them middleware upload neu co file
+
+Buoc 5. Register route vao server
+- app.use('/api/<module>', moduleRoutes)
+
+Buoc 6. FE Service (frontend/src/services)
+- Tao cac ham get/create/update/delete
+- Return res.data de Page dung thong nhat
+
+Buoc 7. FE Page (frontend/src/pages)
+- Quan ly state du lieu, loading, modal, form
+- Goi service trong useEffect va event handler
+- Hien thi toast thanh cong/that bai
+
+Buoc 8. Test nghiep vu
+- Test duong di thanh cong
+- Test validation fail
+- Test xung dot du lieu (duplicate, status transition sai)
+
+====================================================
+3) Module 1 - Recruitment (Ung vien + Nguon)
+====================================================
+
+Muc tieu:
+- Quan ly ung vien, nguon tuyen dung, funnel/kanban trang thai
+
+Backend APIs chinh:
+- GET /api/candidates
+- GET /api/candidates/:id
+- POST /api/candidates (multipart/form-data, cv_file)
+- PATCH /api/candidates/:id
+- PATCH /api/candidates/:id/status
+- DELETE /api/candidates/:id
+- GET /api/candidates/kanban
+- GET /api/candidates/funnel-summary
+- GET/POST/PATCH/DELETE /api/recruitment-sources
+
+Xu ly nghiep vu noi bat:
+- Chuan hoa payload snake_case/camelCase
+- Validate CCCD 12 so, phone VN, email, ngay sinh, chieu cao/can nang
+- Validate source_id bat buoc va ton tai
+- Khong cho update status bang endpoint update thuong (ep dung endpoint status rieng)
+- Luc tao candidate: init ho so PRE_EXAM + tu dong sinh lich thu phi dang ky
+
+Lien ket FE:
+- recruitmentService.js goi candidates + recruitment-sources
+- RecruitmentPage.jsx quan ly form tao/sua, filter, kanban, funnel
+
+====================================================
+4) Module 2 - Partners + Job Orders + Matching
+====================================================
+
+Muc tieu:
+- Quan ly doi tac, lien he, don hang, ghep ung vien vao don
+
+Backend APIs chinh:
+- Partners: /api/partners, /api/partners/:partnerId/contacts
+- Job orders: /api/job-orders
+- Matching:
+  + GET /api/job-orders/:jobOrderId/matching-candidates
+  + GET /api/job-orders/:jobOrderId/candidates
+  + POST /api/job-orders/:jobOrderId/manual-match
+  + DELETE /api/job-orders/:jobOrderId/candidates/:candidateId
+
+Xu ly nghiep vu:
+- Xoa don hang theo huong soft delete/cancel
+- Matching gan voi dieu kien trang thai va ho so candidate
+
+Lien ket FE:
+- partnerService.js + jobOrderService.js
+- PartnersJobsPage.jsx hien thi doi tac, don hang, va thao tac matching
+
+====================================================
+5) Module 3 - Exam Applications (Thi tuyen)
+====================================================
+
+Muc tieu:
+- Lap lich thi, gom session, cap nhat ket qua
+
+Backend APIs chinh:
+- POST/GET /api/exam-applications
+- GET/PATCH /api/exam-applications/sessions/:sessionKey
+- POST /api/exam-applications/sessions/bulk-schedule
+- PATCH /api/exam-applications/:id/schedule
+- PATCH /api/exam-applications/:id/result
+- GET /api/exam-applications/job-orders/:jobOrderId/pending-candidates
+
+Xu ly nghiep vu:
+- Ket qua thi anh huong truc tiep den transition status candidate
+- Session key giup gom va quan ly ca thi theo lo
+
+Lien ket FE:
+- examApplicationService.js
+- Module3Page.jsx va mot phan RecruitmentPage.jsx (cap nhat status/ket qua)
+
+====================================================
+6) Module 4 - Contracts (Hop dong + Template)
+====================================================
+
+Muc tieu:
+- Quan ly template hop dong va hop dong da ky
+
+Backend APIs chinh:
+- Templates:
+  + POST/GET /api/contracts/templates
+  + GET/PATCH/DELETE /api/contracts/templates/:id
+- Contracts:
+  + POST/GET /api/contracts
+  + GET/PATCH/DELETE /api/contracts/:id
+
+Xu ly ky thuat:
+- Upload file contract/template qua multipart
+- Dung middleware uploadContracts, uploadTemplates
+
+Lien ket FE:
+- contractService.js
+- Module4Page.jsx
+
+====================================================
+7) Module 5 - Finance (Fee standards, transactions, schedules)
+====================================================
+
+Muc tieu:
+- Quan ly dinh muc phi, thu/hoan tien, cong no, readiness xuat canh
+
+Backend APIs chinh:
+- Fee standards: /api/fee-standards
+- Transactions:
+  + GET /api/transactions
+  + POST /api/transactions/income
+  + POST /api/transactions/refund
+  + GET /api/transactions/candidate/:candidateId
+- Payment schedules:
+  + POST /api/payment-schedules
+  + GET /api/payment-schedules/candidate/:candidateId
+  + POST /api/payment-schedules/:scheduleId/pay
+  + POST /api/payment-schedules/:scheduleId/refund
+  + GET /api/payment-schedules/readiness-for-exit/:candidateId
+  + POST /api/payment-schedules/:candidateId/refund-process
+
+Xu ly nghiep vu noi bat:
+- Tu dong sinh phi theo event (dang ky, ghep don, do thi...)
+- Tu dong/thu cong xu ly refund theo truong hop
+- Readiness for exit dua tren trang thai thanh toan
+
+Lien ket FE:
+- financeService.js
+- FinancePage.jsx + tab finance trong RecruitmentPage.jsx
+
+====================================================
+8) Module 6 - Documents (Ho so va canh bao)
+====================================================
+
+Muc tieu:
+- Quan ly giay to PRE_EXAM/POST_EXAM, theo doi day du va canh bao
+
+Backend APIs chinh:
+- GET /api/document-types
+- POST /api/candidates/:candidateId/documents/init
+- GET /api/candidates/:candidateId/documents
+- PATCH /api/candidates/:candidateId/documents/:documentTypeCode (multipart)
+- GET /api/candidates/:candidateId/documents/pre-exam-readiness
+- GET /api/alerts/health-expiry
+- GET /api/alerts/visa-delay
+
+Xu ly nghiep vu:
+- Gate condition cho phep/khong phep di tiep trang thai candidate dua tren readiness
+
+Lien ket FE:
+- documentService.js
+- DocumentsPage.jsx va detail modal trong RecruitmentPage.jsx
+
+====================================================
+9) Module 7 - Roadmap (Theo doi lao dong)
+====================================================
+
+Trang thai hien tai trong code:
+- Co route UI: /module-7 va /roadmap
+- FE page: RoadmapPage.jsx
+- Chua thay backend route rieng cho module nay trong danh sach route hien tai
+
+Huong trinh bay bao cao:
+- Neu dang o giai doan UI/placeholder, neu ro pham vi da lam va backlog se bo sung API.
+
+====================================================
+10) Module 8 - Dashboard/MIS
+====================================================
+
+Trang thai hien tai trong code:
+- FE co DashboardPage.jsx
+- So lieu tong hop den tu candidates/transactions/exam... (tuy widget)
+
+Huong trinh bay:
+- Dashboard la lop tong hop KPI tu cac module nghiep vu thay vi module DB rieng.
+
+====================================================
+11) Module 9 - Dao tao (Teachers, Classes, Class Students)
+====================================================
+
+Backend APIs chinh:
+- Teachers: /api/teachers
+- Classes: /api/classes
+- Class students:
+  + POST /api/classes/:id/students
+  + GET /api/classes/:id/students
+  + PATCH /api/classes/:id/students/:classStudentId
+  + DELETE /api/classes/:id/students/:classStudentId
+
+Business rules can trinh bay:
+- teacher_type phai hop class_type
+- Khong them hoc vien vao lop COMPLETED
+- Khong xoa giao vien neu con lop dang gan
+- Khong xoa lop neu con hoc vien
+- Unique (class_id, candidate_id) tranh trung xep lop
+
+Lien ket FE:
+- teacherService.js + classService.js + recruitmentService.js (lay candidate)
+- Module9TrainingPage.jsx
+
+Tai lieu san co de dan trong bao cao:
+- docs/M9_API.md
+
+====================================================
+12) Module Mail (Email templates + logs + manual send)
+====================================================
+
+Backend APIs:
+- GET/POST/PATCH/DELETE /api/emails/templates
+- GET /api/emails/logs
+- POST /api/emails/manual-send
+
+Lien ket FE:
+- emailService.js
+- EmailPage.jsx
+
+Ghi chu schema:
+- backend/database/v1.10.sql + ensureEmailSchema() khi startup
+
+====================================================
+13) Auth va ket noi FE-BE
+====================================================
+
+Auth hien tai:
+- POST /api/auth/login
+- Controller tra ve token random + user
+- FE luu vao localStorage key: ihrms_admin_auth
+
+HTTP client FE:
+- frontend/src/services/http.js
+- baseURL = VITE_API_BASE_URL hoac mac dinh '/api'
+
+Route guard FE:
+- App.jsx check auth de vao layout/chuyen ve /login
+
+====================================================
+14) Error handling, validation, va convention bao cao
+====================================================
+
+Backend:
+- notFoundHandler: route khong ton tai -> 404
+- errorHandler: loi chung -> statusCode + message
+- Validation logic nam trong controller + utils/inputValidation.js
+
+Frontend:
+- Moi action API boc try/catch
+- Dung getErrorMessage(err) + toast de thong bao
+
+Convention nen dua vao slide:
+- 400: input sai
+- 404: khong tim thay
+- 409: xung dot du lieu/nghiep vu
+- 500: loi he thong
+
+====================================================
+15) Mau quy trinh trinh bay 1 use case (de bao cao)
+====================================================
+
+Use case mau: Tao ung vien moi
+1. User nhap form tai RecruitmentPage, chon CV file.
+2. recruitmentService.createCandidate(formData) goi POST /api/candidates.
+3. candidateController validate CCCD, source, phone/email...
+4. candidateModel insert vao bang candidates.
+5. documentModel init bo document PRE_EXAM.
+6. paymentScheduleModel generate phi su kien dang ky.
+7. API tra ve candidate vua tao.
+8. FE refresh list + thong bao thanh cong.
+
+=> Day la luong "API -> nghiep vu -> DB -> FE render" chuan de thuyet trinh.
+
+====================================================
+16) Checklist de tu hoc nhanh truoc bao cao
+====================================================
+
+1. Doc server.js de nam map toan bo route.
+2. Chon 1 module (vi du M1), doc theo thu tu: route -> controller -> model -> page -> service.
+3. Ve sequence diagram cho 2 use case quan trong.
+4. Thu test endpoint bang Postman voi 1 case dung + 1 case sai.
+5. Chup man hinh FE + ket qua DB de lam bang chung demo.
+
+Ket luan:
+- Du an theo kieu modular ro rang, de mo rong.
+- Nghiep vu duoc nhung sau o controller/model.
+- FE va BE lien ket thong qua service layer va endpoint nhat quan.
