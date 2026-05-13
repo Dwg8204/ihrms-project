@@ -9,6 +9,17 @@ exports.createPaymentSchedule = async (req, res) => {
     if (!candidate_id || !description || !amount_due) {
       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc.' });
     }
+    
+    // Validate due_date if provided
+    if (due_date) {
+      const dueDateObj = new Date(due_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (dueDateObj < today) {
+        return res.status(400).json({ success: false, message: 'Hạn đóng không được là ngày trong quá khứ.' });
+      }
+    }
+    
     const schedule = await PaymentSchedule.create({
       candidate_id,
       description,

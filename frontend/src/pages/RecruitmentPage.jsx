@@ -1807,6 +1807,7 @@ function RecruitmentPage() {
             Hạn đóng
             <input
               type="date"
+              min={getTodayDateInput()}
               value={addScheduleForm.due_date}
               onChange={e => setAddScheduleForm({ ...addScheduleForm, due_date: e.target.value })}
             />

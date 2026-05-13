@@ -29,7 +29,7 @@ function validateOptionalPhoneAndEmail(phone, email) {
 // --- Partner CRUD ---
 exports.createPartner = async (req, res, next) => {
   try {
-    const { name, country, contact_person, phone, email, status } = req.body;
+    const { name, country, address, contact_person, phone, email, status } = req.body;
     const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
@@ -40,7 +40,7 @@ exports.createPartner = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid partner status.' });
     }
 
-    const newPartner = await Partner.create({ name, country, status });
+    const newPartner = await Partner.create({ name, country, address, status });
     
     // Nếu có thông tin người liên hệ, tạo bản ghi liên hệ đầu tiên làm Primary
     if (contact_person || normalized.phone || normalized.email) {
@@ -90,7 +90,7 @@ exports.getPartnerById = async (req, res, next) => {
 exports.updatePartner = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, country, contact_person, phone, email, status } = req.body;
+    const { name, country, address, contact_person, phone, email, status } = req.body;
     const normalized = validateOptionalPhoneAndEmail(phone, email);
 
     // Xác thực cơ bản
@@ -98,7 +98,7 @@ exports.updatePartner = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid partner status.' });
     }
 
-    const updatedPartner = await Partner.update(id, { name, country, status });
+    const updatedPartner = await Partner.update(id, { name, country, address, status });
     
     if (!updatedPartner) {
       return res.status(404).json({ success: false, message: 'Partner not found.' });

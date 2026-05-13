@@ -3,7 +3,7 @@ const { PARTNER_STATUSES } = require('../utils/partnerStatus');
 
 class Partner {
   static async create(partnerData) {
-    const { name, country, status = PARTNER_STATUSES.ACTIVE } = partnerData;
+    const { name, country, address, status = PARTNER_STATUSES.ACTIVE } = partnerData;
     try {
       // Kiểm tra tên duy nhất
       const [existing] = await db.query('SELECT id FROM partners WHERE name = ?', [name]);
@@ -12,8 +12,8 @@ class Partner {
       }
 
       const [result] = await db.query(
-        'INSERT INTO partners (name, country, status) VALUES (?, ?, ?)',
-        [name, country, status]
+        'INSERT INTO partners (name, country, address, status) VALUES (?, ?, ?, ?)',
+        [name, country, address, status]
       );
       return { id: result.insertId, ...partnerData };
     } catch (error) {
@@ -93,7 +93,7 @@ class Partner {
   }
 
   static async update(id, partnerData) {
-    const { name, country, status } = partnerData;
+    const { name, country, address, status } = partnerData;
     try {
       // Kiểm tra xem tên có phải là duy nhất nếu tên đang được cập nhật.
       if (name) {
@@ -104,8 +104,8 @@ class Partner {
       }
 
       const [result] = await db.query(
-        'UPDATE partners SET name = COALESCE(?, name), country = COALESCE(?, country), status = COALESCE(?, status) WHERE id = ?',
-        [name, country, status, id]
+        'UPDATE partners SET name = COALESCE(?, name), country = COALESCE(?, country), address = COALESCE(?, address), status = COALESCE(?, status) WHERE id = ?',
+        [name, country, address, status, id]
       );
       if (result.affectedRows === 0) {
         return null; // Không tìm thấy đối tác

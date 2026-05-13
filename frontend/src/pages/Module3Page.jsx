@@ -553,7 +553,7 @@ function Module3Page() {
                   <option value="">Chọn đơn hàng</option>
                   {schedulableJobOrders.map((job) => (
                     <option key={job.id} value={job.id}>
-                      #{job.id} {job.job_title} ({job.pending_count} ứng viên chờ)
+                       {job.job_title} ({job.pending_count} ứng viên chờ)
                     </option>
                   ))}
                 </select>

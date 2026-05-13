@@ -120,6 +120,34 @@ class ClassStudentModel {
     const [result] = await db.query('DELETE FROM class_students WHERE id = ?', [id]);
     return result.affectedRows > 0;
   }
+
+  static async markGraduatedByCandidateResult(candidateId, resultStatus) {
+    const normalizedResult = String(resultStatus || '').trim();
+    if (!normalizedResult || (normalizedResult !== 'Pass' && normalizedResult !== 'Fail')) {
+      return 0;
+    }
+
+    const reason =
+      normalizedResult === 'Pass'
+        ? 'Tự động chốt lớp: đã có kết quả thi Đạt.'
+        : 'Tự động chốt lớp: đã có kết quả thi Trượt.';
+
+    const [result] = await db.query(
+      `
+      UPDATE class_students
+      SET
+        status = ?,
+        attitude_note = CASE
+          WHEN attitude_note IS NULL OR TRIM(attitude_note) = '' THEN ?
+          ELSE CONCAT(attitude_note, ' | ', ?)
+        END
+      WHERE candidate_id = ? AND status = ?
+      `,
+      [CLASS_STUDENT_STATUSES.GRADUATED, reason, reason, candidateId, CLASS_STUDENT_STATUSES.STUDYING]
+    );
+
+    return result.affectedRows || 0;
+  }
 }
 
 module.exports = {
