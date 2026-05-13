@@ -210,8 +210,43 @@ function RecruitmentPage() {
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentNote, setPaymentNote] = useState("");
   const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundAllConfirmOpen, setRefundAllConfirmOpen] = useState(false);
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundNote, setRefundNote] = useState("");
+
+  const hasRefundedSchedule = useMemo(
+    () => paymentSchedules.some((schedule) => schedule.status === 'REFUNDED'),
+    [paymentSchedules]
+  );
+
+  const hasOutstandingPayment = useMemo(
+    () => paymentSchedules.some(
+      (schedule) => !['CANCELLED', 'REFUNDED'].includes(schedule.status) && Number(schedule.balance || 0) > 0
+    ),
+    [paymentSchedules]
+  );
+
+  const financeStatus = useMemo(() => {
+    if (hasOutstandingPayment) {
+      return { label: 'CÒN NỢ PHÍ', className: 'color-danger' };
+    }
+
+    if (
+      (candidateDetail?.status === 'WITHDRAWN' || candidateDetail?.status === 'FAILED_POOL') &&
+      hasRefundedSchedule
+    ) {
+      return { label: 'ĐÃ HOÀN PHÍ', className: 'muted' };
+    }
+
+    if (candidateDetail?.status === 'WITHDRAWN') {
+      return { label: 'ĐÃ RÚT HỒ SƠ', className: 'muted' };
+    }
+
+    return {
+      label: isReadyForExit ? 'ĐỦ ĐIỀU KIỆN' : 'CÒN NỢ PHÍ',
+      className: isReadyForExit ? 'color-primary' : 'color-danger'
+    };
+  }, [candidateDetail?.status, hasOutstandingPayment, hasRefundedSchedule, isReadyForExit]);
 
   // Add schedule manually
   const [addScheduleModalOpen, setAddScheduleModalOpen] = useState(false);
@@ -760,15 +795,20 @@ function RecruitmentPage() {
 
   const handleRefundAll = async () => {
     if (!candidateDetail) return;
+    setRefundAllConfirmOpen(true);
+  };
+
+  const handleConfirmRefundAll = async () => {
+    if (!candidateDetail) return;
+
     let reason = candidateDetail.withdrawal_reason || 'TH3';
     if (candidateDetail.status === 'FAILED_POOL') reason = 'TH1';
-
-    if (!window.confirm(`Xác nhận thực hiện hoàn tiền cho tất cả các khoản phí đã đóng (Theo trường hợp ${reason})?`)) return;
 
     try {
       setUpdating(true);
       await financeService.processRefundsManually(candidateDetail.id, reason);
       showSuccess('Đã thực hiện hoàn tiền thành công.');
+      setRefundAllConfirmOpen(false);
       loadFinancialData(candidateDetail.id);
       await reloadAll();
     } catch (err) {
@@ -1596,8 +1636,8 @@ function RecruitmentPage() {
                   </div>
                   <div className="mini-stat">
                     <span>Trạng thái tài chính</span>
-                    <strong className={candidateDetail?.status === 'WITHDRAWN' ? 'muted' : (isReadyForExit ? "color-primary" : "color-danger")}>
-                      {candidateDetail?.status === 'WITHDRAWN' ? "ĐÃ RÚT HỒ SƠ" : (isReadyForExit ? "ĐỦ ĐIỀU KIỆN" : "CÒN NỢ PHÍ")}
+                    <strong className={financeStatus.className}>
+                      {financeStatus.label}
                     </strong>
                   </div>
                 </div>
@@ -1607,7 +1647,7 @@ function RecruitmentPage() {
                   {candidateDetail?.status !== 'WITHDRAWN' && candidateDetail?.status !== 'FAILED_POOL' ? (
                     <button className="btn small" onClick={handlePayAll} disabled={!paymentSchedules.some(s => s.balance > 0 && s.status !== 'CANCELLED')}>Đóng tất cả phí nợ</button>
                   ) : (
-                    <button className="btn small danger" onClick={handleRefundAll} disabled={!paymentSchedules.some(s => s.amount_paid > 0 && s.status !== 'REFUNDED')}>Xác nhận hoàn tất cả tiền</button>
+                    <button className="btn small danger" onClick={handleRefundAll} disabled={!paymentSchedules.some(s => s.amount_paid > 0 && s.status !== 'REFUNDED')}>Xác nhận hoàn tiền</button>
                   )}
                 </div>
 
@@ -1776,6 +1816,26 @@ function RecruitmentPage() {
             <button type="button" className="btn ghost" onClick={() => setRefundModalOpen(false)}>Hủy</button>
           </div>
         </form>
+      </DetailModal>
+
+      <DetailModal
+        open={refundAllConfirmOpen}
+        title="Xác nhận hoàn tiền "
+        onClose={() => setRefundAllConfirmOpen(false)}
+      >
+        <div className="grid-form">
+          <div className="field-span-2" style={{ lineHeight: 1.6 }}>
+           
+          </div>
+          <div className="field-span-2 row-actions" style={{ marginTop: '12px' }}>
+            <button type="button" className="btn danger" onClick={handleConfirmRefundAll}>
+              Xác nhận hoàn tiền
+            </button>
+            <button type="button" className="btn ghost" onClick={() => setRefundAllConfirmOpen(false)}>
+              Hủy
+            </button>
+          </div>
+        </div>
       </DetailModal>
 
       <DetailModal
