@@ -211,6 +211,9 @@ function Module4Page() {
     setContractModalOpen(true);
   };
 
+
+
+  
   const handleContractSubmit = async (e) => {
     e.preventDefault();
     if (!contractForm.candidate_id || !contractForm.contract_type) {
