@@ -29,6 +29,9 @@ const initialPartnerForm = {
   name: '',
   country: '',
   address: '',
+  contact_person: '',
+  phone: '',
+  email: '',
   status: 'ACTIVE'
 };
 
@@ -453,6 +456,9 @@ function PartnersJobsPage() {
       name: partner.name || '',
       country: partner.country || '',
       address: partner.address || '',
+      contact_person: partner.contact_person || '',
+      phone: partner.phone || '',
+      email: partner.email || '',
       status: partner.status || 'ACTIVE'
     });
     setSelectedPartnerId(partner.id);
@@ -1863,6 +1869,32 @@ function PartnersJobsPage() {
             <input
               value={partnerEditForm.address}
               onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, address: e.target.value }))}
+            />
+          </label>
+          <label>
+            Người liên hệ
+            <input
+              value={partnerEditForm.contact_person}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, contact_person: e.target.value }))}
+            />
+          </label>
+          <label>
+            Điện thoại
+            <input
+              value={partnerEditForm.phone}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))}
+              inputMode="numeric"
+              pattern="0\d{9}"
+              maxLength={10}
+              placeholder="0901234567"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={partnerEditForm.email}
+              onChange={(e) => setPartnerEditForm((prev) => ({ ...prev, email: e.target.value }))}
             />
           </label>
           <label className="field-span-2">

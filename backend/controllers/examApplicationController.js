@@ -3,6 +3,7 @@ const Candidate = require('../models/candidateModel');
 const { CANDIDATE_STATUSES } = require('../utils/candidateStatus');
 const db = require('../config/db');
 const { autoSendExamResultEmail } = require('./emailController');
+const { ClassStudentModel } = require('../models/classStudentModel');
 const { isFutureDateTime } = require('../utils/inputValidation');
 
 function validateFutureExamDate(examDate) {
@@ -161,6 +162,7 @@ exports.updateExamResult = async (req, res, next) => {
         // Tự động gửi email thông báo kết quả thi (không blocking)
         if (result_status === 'Pass' || result_status === 'Fail') {
             autoSendExamResultEmail(currentExamApp.candidate_id, result_status);
+            await ClassStudentModel.markGraduatedByCandidateResult(currentExamApp.candidate_id, result_status);
         }
 
         res.status(200).json({

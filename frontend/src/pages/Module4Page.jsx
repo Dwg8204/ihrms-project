@@ -681,7 +681,7 @@ function Module4Page() {
               <option value="">Chọn đơn hàng</option>
               {jobOrders.map((job) => (
                 <option key={job.id} value={job.id}>
-                  #{job.id} {job.job_title} ({job.partner_name})
+                {job.job_title} ({job.partner_name})
                 </option>
               ))}
             </select>
